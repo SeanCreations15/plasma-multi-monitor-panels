@@ -1,0 +1,160 @@
+# Plasma Taskbar Sync
+
+Keep pinned apps and their order the same across KDE Plasma taskbars.
+
+The service checks each taskbar every two seconds. Pin, unpin, or move an app
+on one display and the same list appears on the others.
+
+## Install
+
+```sh
+git clone https://github.com/SleepyStew/plasma-taskbar-sync.git \
+&& cd plasma-taskbar-sync \
+&& ./install.sh
+```
+
+The installer builds a Python zipapp from the cloned source. It
+has no external dependencies.
+
+It installs two files:
+
+- `~/.local/bin/plasma-taskbar-sync`
+- `~/.local/share/systemd/user/plasma-taskbar-sync.service`
+
+It then enables and starts the systemd user service. No root access is needed.
+Upgrades remove the old unit automatically.
+
+Check the setup:
+
+```sh
+plasma-taskbar-sync status
+```
+
+## Background
+
+I was searching through Plasma's settings desperately trying to find a way to put the taskbar on all of my monitors. With no luck, I did some research and after much frustrated googling, I discovered Plasma does not currently support having a synced taskbar across monitors, so I made it myself.
+
+## Requirements
+
+- KDE Plasma 6
+- Two or more displays with a standard Task Manager or Icons-only Task Manager
+- Python 3.10 or newer
+- Qt 6 `qdbus`, named `qdbus6` or `qdbus-qt6`
+- KDE's `kbuildsycoca6` tool
+- Git, `install`, and `mktemp`
+- A systemd user session for automatic startup
+
+These dependencies come pre-installed on most Plasma distros.
+
+## Commands
+
+```text
+plasma-taskbar-sync doctor
+plasma-taskbar-sync status [--json]
+plasma-taskbar-sync once [--dry-run]
+plasma-taskbar-sync watch [--interval SECONDS]
+plasma-taskbar-sync self-test
+```
+
+- `doctor` prints full setup, service, Plasma, and taskbar details.
+- `status` reports whether the taskbars match and the service is running.
+- `once` runs one sync and exits.
+- `watch` keeps syncing until stopped.
+- `self-test` tests pinning, order, and an empty list against live taskbars.
+
+The self-test changes one taskbar, checks that the change reaches all taskbars,
+then restores each taskbar and the prior state file.
+
+## Update
+
+From the cloned project:
+
+```sh
+git pull --ff-only && ./install.sh
+```
+
+The installer replaces the executable and service file, restarts the service,
+and keeps the saved sync state.
+
+## How it works
+
+Each pass reads the `launchers` setting from every supported task manager and
+compares it with the last saved value.
+
+- One changed taskbar wins.
+- Several taskbars with the same change win together.
+- If taskbars have different changes, screen 0 wins.
+- If screen 0 has no task manager, the first task manager wins.
+
+Plasma stores launcher settings separately from the task manager's live view.
+After a write, the app runs `kbuildsycoca6 --noincremental`. The cache event
+prompts Plasma to redraw the launcher list at once. This runs only after a real
+change, not on every check.
+
+
+## Files and saved state
+
+The app stores its state and process lock in:
+
+```text
+~/.local/state/plasma-taskbar-sync/
+```
+
+## Troubleshooting
+
+Check taskbar and service health:
+
+```sh
+plasma-taskbar-sync status
+```
+
+Print full diagnostic information:
+
+```sh
+plasma-taskbar-sync doctor
+```
+
+`doctor` includes command paths, versions, file paths, service state, widget
+IDs, plugin names, config-key state, and launcher lists.
+
+Check the service and recent logs:
+
+```sh
+systemctl --user status plasma-taskbar-sync.service
+journalctl --user -u plasma-taskbar-sync.service -n 100
+```
+
+The watcher stays quiet when nothing changes. It logs writes, conflicts, and
+errors.
+
+## Uninstall
+
+From the cloned project:
+
+```sh
+./uninstall.sh
+```
+
+This stops and disables the service, then removes the executable, service file,
+process lock, and saved state. It does not change the current taskbars.
+It also removes the old service path used by earlier versions.
+
+The script does not remove a custom file passed through `--state-file`.
+
+## Development
+
+Run all local checks:
+
+```sh
+./check.sh
+```
+
+This runs the Python tests, checks every shell script, tests install and
+uninstall in temporary user directories, builds a temporary zipapp, and checks
+the systemd unit when the host allows it.
+
+See [CONTRIBUTING](CONTRIBUTING.md) for more information.
+
+## License
+
+Licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE).
