@@ -2,8 +2,8 @@
 
 Keep pinned apps and their order the same across KDE Plasma taskbars.
 
-The service checks each taskbar every two seconds. Pin, unpin, or move an app
-on one display and the same list appears on the others.
+The service watches Plasma's settings for changes. Pin, unpin, or move an app
+on one display and your changes will be copied to other displays within about two seconds.
 
 ## Install
 
@@ -42,6 +42,7 @@ I was searching through Plasma's settings desperately trying to find a way to pu
 - Qt 6 `qdbus`, named `qdbus6` or `qdbus-qt6`
 - KDE's `kbuildsycoca6` tool
 - Git, `install`, and `mktemp`
+- Linux with `inotify`
 - A systemd user session for automatic startup
 
 These dependencies come pre-installed on most Plasma distros.
@@ -52,14 +53,14 @@ These dependencies come pre-installed on most Plasma distros.
 plasma-taskbar-sync doctor
 plasma-taskbar-sync status [--json]
 plasma-taskbar-sync once [--dry-run]
-plasma-taskbar-sync watch [--interval SECONDS]
+plasma-taskbar-sync watch [--fallback-interval SECONDS]
 plasma-taskbar-sync self-test
 ```
 
 - `doctor` prints full setup, service, Plasma, and taskbar details.
 - `status` reports whether the taskbars match and the service is running.
 - `once` runs one sync and exits.
-- `watch` keeps syncing until stopped.
+- `watch` reacts to taskbar changes until stopped.
 - `self-test` tests pinning, order, and an empty list against live taskbars.
 
 The self-test changes one taskbar, checks that the change reaches all taskbars,
@@ -78,8 +79,13 @@ and keeps the saved sync state.
 
 ## How it works
 
-Each pass reads the `launchers` setting from every supported task manager and
-compares it with the last saved value.
+The watcher listens for changes to Plasma's applet settings, waits half a
+second for each edit to finish, then reads the `launchers` setting from every
+supported task manager and compares it with the last saved value. It also runs
+a safety check every 60 seconds.
+
+If `inotify` is not available, the service checks every two seconds and tries
+to restore the event watch once a minute.
 
 - One changed taskbar wins.
 - Several taskbars with the same change win together.
@@ -124,8 +130,8 @@ systemctl --user status plasma-taskbar-sync.service
 journalctl --user -u plasma-taskbar-sync.service -n 100
 ```
 
-The watcher stays quiet when nothing changes. It logs writes, conflicts, and
-errors.
+The watcher stays quiet when nothing changes. It logs writes, conflicts,
+errors, and event-watch failures.
 
 ## Uninstall
 

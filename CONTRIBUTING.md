@@ -27,6 +27,7 @@ Remove private app names from the launcher list if needed.
 
 - Put sync choices in `core.py`.
 - Put Plasma reads, writes, and refresh calls in `plasma.py`.
+- Put Linux file-event handling in `events.py`.
 - Keep command output and argument handling in `cli.py`.
 - Keep zipapp build details in `tools/build_zipapp.py`.
 - Keep state files backward compatible or raise the state version.
@@ -48,5 +49,6 @@ Run:
 ./check.sh
 ```
 
-The install test uses a temporary home directory and a fake `systemctl`. Keep
+The install test uses a temporary home directory and a fake `systemctl`. The
+event tests use temporary directories and the host's `inotify` support. Keep
 tests isolated from the user's files, service, and Plasma session.

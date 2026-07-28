@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from dataclasses import dataclass
 import json
 from pathlib import Path
@@ -13,6 +14,11 @@ import time
 
 from plasma_taskbar_sync import __version__
 from plasma_taskbar_sync.core import sync_once
+from plasma_taskbar_sync.events import (
+    EventSource,
+    InotifyEventSource,
+    plasma_config_path,
+)
 from plasma_taskbar_sync.model import TaskManager
 from plasma_taskbar_sync.plasma import (
     PlasmaClient,
@@ -39,6 +45,11 @@ _EXPECTED_ERRORS = (
 )
 _SERVICE_NAME = "plasma-taskbar-sync.service"
 _SYSTEMCTL_TIMEOUT = 5
+_DEBOUNCE_SECONDS = 0.5
+_ERROR_RETRY_SECONDS = 2.0
+_POLL_FALLBACK_SECONDS = 2.0
+_EVENT_RETRY_SECONDS = 60.0
+_WATCH_ERROR_REPEAT_SECONDS = 300.0
 
 
 @dataclass(frozen=True)
@@ -188,33 +199,138 @@ def command_once(
     return 0
 
 
-def command_watch(client: PlasmaClient, state_path: Path, interval: float) -> int:
+def command_watch(
+    client: PlasmaClient,
+    state_path: Path,
+    fallback_interval: float,
+    *,
+    event_source_factory: Callable[[Path], EventSource] = (
+        InotifyEventSource
+    ),
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
     last_error: str | None = None
     last_error_time = 0.0
-    while True:
-        try:
-            with exclusive_lock(_lock_path(state_path)):
-                result = sync_once(client, state_path)
-            if result.conflict:
-                print(
-                    _CONFLICT_MESSAGE,
-                    file=sys.stderr,
-                    flush=True,
-                )
-            if result.changed:
-                print(
-                    f"Synced {result.managers} task managers",
-                    flush=True,
-                )
-            last_error = None
-        except _EXPECTED_ERRORS as error:
-            detail = concise_error(error)
-            now = time.monotonic()
-            if detail != last_error or now - last_error_time >= 30:
-                print(f"Sync check failed: {detail}", file=sys.stderr, flush=True)
-                last_error = detail
-                last_error_time = now
-        time.sleep(interval)
+    last_watch_error: str | None = None
+    last_watch_error_time = 0.0
+    event_source: EventSource | None = None
+    next_event_retry = monotonic()
+    next_sync = next_event_retry
+    change_deadline: float | None = None
+
+    try:
+        while True:
+            now = monotonic()
+            if event_source is None and now >= next_event_retry:
+                try:
+                    event_source = event_source_factory(plasma_config_path())
+                except OSError as error:
+                    detail = concise_error(error)
+                    if (
+                        detail != last_watch_error
+                        or now - last_watch_error_time
+                        >= _WATCH_ERROR_REPEAT_SECONDS
+                    ):
+                        print(
+                            f"Event watch unavailable: {detail}; "
+                            f"polling every {_POLL_FALLBACK_SECONDS:g} seconds",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        last_watch_error = detail
+                        last_watch_error_time = now
+                    next_event_retry = now + _EVENT_RETRY_SECONDS
+                else:
+                    if last_watch_error is not None:
+                        print("Event watch restored", flush=True)
+                    last_watch_error = None
+
+            now = monotonic()
+            event_due = (
+                change_deadline is not None
+                and now >= change_deadline
+            )
+            if now >= next_sync or event_due:
+                try:
+                    with exclusive_lock(_lock_path(state_path)):
+                        result = sync_once(client, state_path)
+                    if result.conflict:
+                        print(
+                            _CONFLICT_MESSAGE,
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                    if result.changed:
+                        print(
+                            f"Synced {result.managers} task managers",
+                            flush=True,
+                        )
+                    last_error = None
+                    next_sync = now + (
+                        fallback_interval
+                        if event_source is not None
+                        else _POLL_FALLBACK_SECONDS
+                    )
+                except _EXPECTED_ERRORS as error:
+                    now = monotonic()
+                    detail = concise_error(error)
+                    if (
+                        detail != last_error
+                        or now - last_error_time >= 30
+                    ):
+                        print(
+                            f"Sync check failed: {detail}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
+                        last_error = detail
+                        last_error_time = now
+                    next_sync = now + _ERROR_RETRY_SECONDS
+                change_deadline = None
+                continue
+
+            deadlines = [next_sync]
+            if change_deadline is not None:
+                deadlines.append(change_deadline)
+            if event_source is None:
+                deadlines.append(next_event_retry)
+            wait_time = max(0.0, min(deadlines) - now)
+
+            if event_source is None:
+                sleep(wait_time)
+                continue
+
+            try:
+                changed = event_source.wait(wait_time)
+            except OSError as error:
+                detail = concise_error(error)
+                event_source.close()
+                event_source = None
+                now = monotonic()
+                if (
+                    detail != last_watch_error
+                    or now - last_watch_error_time
+                    >= _WATCH_ERROR_REPEAT_SECONDS
+                ):
+                    print(
+                        f"Event watch failed: {detail}; "
+                        f"polling every {_POLL_FALLBACK_SECONDS:g} seconds",
+                        file=sys.stderr,
+                        flush=True,
+                    )
+                    last_watch_error = detail
+                    last_watch_error_time = now
+                next_event_retry = now + _EVENT_RETRY_SECONDS
+                next_sync = now
+                change_deadline = None
+                continue
+
+            if changed:
+                change_deadline = monotonic() + _DEBOUNCE_SECONDS
+    finally:
+        if event_source is not None:
+            event_source.close()
 
 
 def command_doctor(state_path: Path, qdbus: str | None = None) -> int:
@@ -471,10 +587,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     watch = commands.add_parser("watch", help="keep syncing until stopped")
     watch.add_argument(
-        "--interval",
+        "--fallback-interval",
         type=float,
-        default=2.0,
-        help="seconds between checks (default: 2)",
+        default=60.0,
+        help="maximum seconds between full checks (default: 60)",
     )
 
     commands.add_parser("doctor", help="show full diagnostic information")
@@ -488,8 +604,11 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "watch" and args.interval < 0.25:
-        parser.error("--interval must be at least 0.25 seconds")
+    if (
+        args.command == "watch"
+        and args.fallback_interval < 0.25
+    ):
+        parser.error("--fallback-interval must be at least 0.25 seconds")
 
     try:
         if args.command == "doctor":
@@ -501,7 +620,11 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "once":
             return command_once(client, args.state_file, dry_run=args.dry_run)
         if args.command == "watch":
-            return command_watch(client, args.state_file, args.interval)
+            return command_watch(
+                client,
+                args.state_file,
+                args.fallback_interval,
+            )
         if args.command == "self-test":
             return command_self_test(client, args.state_file)
     except KeyboardInterrupt:
