@@ -508,7 +508,7 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         text = output.getvalue()
-        self.assertIn("Plasma Taskbar Sync: 0.3.0", text)
+        self.assertIn("Plasma Taskbar Sync: 0.4.0", text)
         self.assertIn("Service state: active", text)
         self.assertIn("Task managers: 2", text)
         self.assertIn("Screen 0: panel 10, widget 20", text)

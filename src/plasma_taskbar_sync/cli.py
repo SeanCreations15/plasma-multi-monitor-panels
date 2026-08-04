@@ -20,7 +20,7 @@ from plasma_taskbar_sync.events import (
     plasma_config_path,
 )
 from plasma_taskbar_sync.model import TaskManager
-from plasma_taskbar_sync.panels import backup_plasma_config, sync_primary_panel
+from plasma_taskbar_sync.panels import backup_plasma_config, sync_panels
 from plasma_taskbar_sync.plasma import (
     PlasmaClient,
     find_kbuildsycoca,
@@ -188,13 +188,15 @@ def command_once(
 ) -> int:
     with exclusive_lock(_lock_path(state_path)):
         if isinstance(client, PlasmaClient):
-            panel_preview = sync_primary_panel(client, dry_run=True)
+            panel_preview = sync_panels(client, state_path, dry_run=True)
         else:
             panel_preview = None
-        if panel_preview is not None and panel_preview.changed and not dry_run:
-            backup_plasma_config(state_path)
-            panel_result = sync_primary_panel(client)
-            client.refresh_launcher_model()
+        if panel_preview is not None and not dry_run:
+            if panel_preview.changed:
+                backup_plasma_config(state_path)
+            panel_result = sync_panels(client, state_path)
+            if panel_result.changed:
+                client.refresh_launcher_model()
         else:
             panel_result = panel_preview
         result = sync_once(client, state_path, dry_run=dry_run)
@@ -209,7 +211,10 @@ def command_once(
         action = "Synced" if result.changed else "Already in sync"
     panel_action = "would sync" if dry_run else "synced"
     if panel_result is not None and panel_result.changed:
-        print(f"Panels {panel_action}: {panel_result.panels} panels")
+        print(
+            f"Panels {panel_action} from screen {panel_result.source_screen}: "
+            f"{panel_result.panels} panels"
+        )
     elif panel_result is not None:
         print(f"Panels already in sync: {panel_result.panels} panels")
     print(f"{action}: {result.managers} task managers")
@@ -272,14 +277,16 @@ def command_watch(
                 try:
                     with exclusive_lock(_lock_path(state_path)):
                         panel_preview = (
-                            sync_primary_panel(client, dry_run=True)
+                            sync_panels(client, state_path, dry_run=True)
                             if isinstance(client, PlasmaClient)
                             else None
                         )
-                        if panel_preview is not None and panel_preview.changed:
-                            backup_plasma_config(state_path)
-                            panel_result = sync_primary_panel(client)
-                            client.refresh_launcher_model()
+                        if panel_preview is not None:
+                            if panel_preview.changed:
+                                backup_plasma_config(state_path)
+                            panel_result = sync_panels(client, state_path)
+                            if panel_result.changed:
+                                client.refresh_launcher_model()
                         else:
                             panel_result = panel_preview
                         result = sync_once(client, state_path)
@@ -297,7 +304,14 @@ def command_watch(
                     if panel_result is not None and panel_result.changed:
                         detail = " (widget structure rebuilt)" if panel_result.rebuilt else ""
                         print(
-                            f"Synced {panel_result.panels} panels from primary{detail}",
+                            f"Synced {panel_result.panels} panels from screen "
+                            f"{panel_result.source_screen}{detail}",
+                            flush=True,
+                        )
+                    if panel_result is not None and panel_result.conflict:
+                        print(
+                            "Conflicting panel edits found; primary screen 0 won",
+                            file=sys.stderr,
                             flush=True,
                         )
                     last_error = None

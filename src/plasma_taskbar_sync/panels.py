@@ -1,4 +1,4 @@
-"""Primary-authoritative Plasma panel synchronization."""
+"""Three-way KDE Plasma panel synchronization."""
 
 from __future__ import annotations
 
@@ -96,6 +96,8 @@ class PanelSyncResult:
     panels: int
     changed: bool
     rebuilt: bool = False
+    source_screen: int = 0
+    conflict: bool = False
 
 
 class PanelScriptClient(Protocol):
@@ -171,6 +173,60 @@ def panels_match(source: dict[str, Any], destination: dict[str, Any]) -> bool:
         ):
             return False
     return True
+
+
+def panels_equivalent(first: dict[str, Any], second: dict[str, Any]) -> bool:
+    """Compare profiles in both directions so newly added keys are detected."""
+
+    return panels_match(first, second) and panels_match(second, first)
+
+
+def _profile(panel: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "properties": panel["properties"],
+        "widgets": panel["widgets"],
+    }
+
+
+def _panel_state_path(state_path: Path) -> Path:
+    return state_path.with_name("panels.json")
+
+
+def _read_panel_state(state_path: Path) -> dict[str, Any] | None:
+    path = _panel_state_path(state_path)
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        return None
+    if not isinstance(value, dict) or value.get("version") != 1:
+        raise ValueError(f"unsupported panel sync state in {path}")
+    selected = value.get("selected")
+    if not isinstance(selected, dict):
+        raise ValueError(f"invalid panel sync state in {path}")
+    if not isinstance(selected.get("properties"), dict):
+        raise ValueError(f"invalid panel properties in {path}")
+    if not isinstance(selected.get("widgets"), list):
+        raise ValueError(f"invalid panel widgets in {path}")
+    return selected
+
+
+def _write_panel_state(state_path: Path, panel: dict[str, Any]) -> None:
+    path = _panel_state_path(state_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(
+                {"version": 1, "selected": _profile(panel)},
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _apply_script(source: dict[str, Any], destinations: list[int]) -> str:
@@ -267,12 +323,13 @@ for (var p = 0; p < destinationIds.length; ++p) {{
 """
 
 
-def sync_primary_panel(
+def sync_panels(
     client: PanelScriptClient,
+    state_path: Path,
     *,
     dry_run: bool = False,
 ) -> PanelSyncResult:
-    """Make all secondary panels match the screen-zero primary panel."""
+    """Propagate the panel changed since the last agreed snapshot."""
 
     panels = query_panels(client)
     primary = [panel for panel in panels if panel["screen"] == 0]
@@ -280,8 +337,28 @@ def sync_primary_panel(
         raise ValueError(
             f"expected exactly one panel on primary screen 0; found {len(primary)}"
         )
-    source = primary[0]
-    destinations = [panel for panel in panels if panel["screen"] != 0]
+    previous = _read_panel_state(state_path)
+    conflict = False
+    if previous is None:
+        source = primary[0]
+    else:
+        edited = [
+            panel for panel in panels if not panels_equivalent(previous, _profile(panel))
+        ]
+        if not edited:
+            source = primary[0]
+        elif len(edited) == 1:
+            source = edited[0]
+        elif all(
+            panels_equivalent(_profile(edited[0]), _profile(panel))
+            for panel in edited[1:]
+        ):
+            source = edited[0]
+        else:
+            source = primary[0]
+            conflict = True
+
+    destinations = [panel for panel in panels if panel["id"] != source["id"]]
     changed = [panel for panel in destinations if not panels_match(source, panel)]
     rebuilt = any(
         [widget.get("type") for widget in panel["widgets"]]
@@ -303,13 +380,38 @@ def sync_primary_panel(
             for panel_id, original in originals.items():
                 client.evaluate(_apply_script(original, [panel_id]))
             raise RuntimeError(
-                "panel synchronization did not verify; restored secondary panels"
+                "panel synchronization did not verify; restored destination panels"
             )
+    if not dry_run:
+        _write_panel_state(state_path, source)
     return PanelSyncResult(
         panels=len(destinations) + 1,
         changed=bool(changed),
         rebuilt=rebuilt,
+        source_screen=source["screen"],
+        conflict=conflict,
     )
+
+
+def sync_primary_panel(
+    client: PanelScriptClient,
+    *,
+    dry_run: bool = False,
+) -> PanelSyncResult:
+    """Compatibility wrapper for callers that do not persist panel history."""
+
+    panels = query_panels(client)
+    primary = [panel for panel in panels if panel["screen"] == 0]
+    if len(primary) != 1:
+        raise ValueError(
+            f"expected exactly one panel on primary screen 0; found {len(primary)}"
+        )
+    source = primary[0]
+    destinations = [panel for panel in panels if panel["id"] != source["id"]]
+    changed = [panel for panel in destinations if not panels_match(source, panel)]
+    if changed and not dry_run:
+        client.evaluate(_apply_script(source, [panel["id"] for panel in changed]))
+    return PanelSyncResult(len(panels), bool(changed))
 
 
 def backup_plasma_config(state_path: Path, *, keep: int = 10) -> Path:

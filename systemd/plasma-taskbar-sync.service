@@ -1,5 +1,5 @@
 [Unit]
-Description=Keep KDE Plasma panels in sync from the primary display
+Description=Keep KDE Plasma panels synchronized across displays
 PartOf=graphical-session.target
 After=graphical-session.target
 

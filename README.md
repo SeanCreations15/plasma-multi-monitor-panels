@@ -1,13 +1,10 @@
 # Plasma Panel Sync
 
-Keep complete KDE Plasma panels synchronized across multiple displays, using
-the primary display (Plasma screen 0) as the source of truth.
+Keep complete KDE Plasma panels synchronized across multiple displays.
 
 The service watches Plasma's settings for changes. Add, remove, configure, or
-move a panel widget on the primary display and the change is copied to the
-secondary displays. Panel layout and task-manager launchers are synchronized
-too. Changes made only on a secondary display are reverted to the primary
-layout.
+move a panel widget on any display and the change is copied to every other
+display. Panel layout and task-manager launchers are synchronized too.
 
 Before changing panels, the service stores timestamped configuration backups
 under `~/.local/state/plasma-taskbar-sync/backups/` and retains the ten newest.
@@ -92,19 +89,22 @@ The watcher listens for changes to Plasma's applet settings, waits half a
 second for each edit to finish, then compares every secondary panel with the
 primary snapshot. It also runs a safety check every 60 seconds.
 
-The panel synchronizer snapshots the panel on screen 0, including panel
+The panel synchronizer remembers the last layout agreed by all displays. It
+compares each live panel with that snapshot to identify which display changed,
+then uses that panel as the source for the others. Snapshots include panel
 properties, widget types, widget order, recursive widget configuration, and
 System Tray settings. Monitor-specific containment metadata and global
 shortcuts are deliberately excluded. Existing matching widgets are updated in
-place so their Plasma instance IDs remain stable; a secondary panel is rebuilt
-only when its widget structure differs.
+place so their Plasma instance IDs remain stable; a panel is rebuilt only when
+its widget structure differs.
 
 If `inotify` is not available, the service checks every two seconds and tries
 to restore the event watch once a minute.
 
-Screen 0 always wins. Changes made on a secondary panel are reverted on the
-next sync pass. This makes conflict resolution predictable and prevents three
-panels from gradually drifting apart.
+One edited panel wins regardless of its display. If multiple panels receive
+the same edit before a sync pass, that shared edit wins. If multiple panels
+receive incompatible edits at the same time, screen 0 wins as the deterministic
+conflict fallback.
 
 Plasma stores launcher settings separately from the task manager's live view.
 After a write, the app runs `kbuildsycoca6 --noincremental`. The cache event
@@ -119,6 +119,9 @@ The app stores its state and process lock in:
 ```text
 ~/.local/state/plasma-taskbar-sync/
 ```
+
+`panels.json` contains the last layout agreed by all panels and is what makes
+changes from secondary displays distinguishable from stale layouts.
 
 ## Troubleshooting
 
