@@ -245,7 +245,17 @@ function writeTree(applet, tree, path) {{
     var keys = Object.keys(tree.keys || {{}});
     for (var i = 0; i < keys.length; ++i) {{
         if (keys[i] === "SystrayContainmentId") continue;
-        applet.writeConfig(keys[i], tree.keys[keys[i]]);
+        var value = tree.keys[keys[i]];
+        // KConfig exposes StringList values as comma-joined strings through
+        // Plasma's scripting API. Writing that string back makes Task Manager
+        // treat the whole list as one malformed launcher, so restore its
+        // actual array type before writing.
+        if (keys[i] === "launchers" && typeof value === "string") {{
+            value = value === "" ? [] : value.split(",").filter(function(item) {{
+                return item !== "";
+            }});
+        }}
+        applet.writeConfig(keys[i], value);
     }}
     var groups = Object.keys(tree.groups || {{}});
     for (var j = 0; j < groups.length; ++j) {{

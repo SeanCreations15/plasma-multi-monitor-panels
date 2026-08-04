@@ -67,6 +67,8 @@ class PanelTests(unittest.TestCase):
             result = sync_panels(client, Path(directory) / "state.json")
             self.assertTrue(result.changed)
             self.assertEqual(len(client.scripts), 3)
+            self.assertIn('keys[i] === "launchers"', client.scripts[1])
+            self.assertIn('value.split(",")', client.scripts[1])
 
     def test_secondary_edit_becomes_source(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
