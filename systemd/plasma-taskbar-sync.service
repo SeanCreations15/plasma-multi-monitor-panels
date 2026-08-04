@@ -1,5 +1,5 @@
 [Unit]
-Description=Keep KDE Plasma taskbar launchers in sync
+Description=Keep KDE Plasma panels in sync from the primary display
 PartOf=graphical-session.target
 After=graphical-session.target
 

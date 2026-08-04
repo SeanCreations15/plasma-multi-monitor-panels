@@ -1,9 +1,18 @@
-# Plasma Taskbar Sync
+# Plasma Panel Sync
 
-Keep pinned apps and their order the same across KDE Plasma taskbars.
+Keep complete KDE Plasma panels synchronized across multiple displays, using
+the primary display (Plasma screen 0) as the source of truth.
 
-The service watches Plasma's settings for changes. Pin, unpin, or move an app
-on one display and your changes will be copied to other displays within about two seconds.
+The service watches Plasma's settings for changes. Add, remove, configure, or
+move a panel widget on the primary display and the change is copied to the
+secondary displays. Panel layout and task-manager launchers are synchronized
+too. Changes made only on a secondary display are reverted to the primary
+layout.
+
+Before changing panels, the service stores timestamped configuration backups
+under `~/.local/state/plasma-taskbar-sync/backups/` and retains the ten newest.
+Every update is read back from Plasma for verification; if verification fails,
+the service attempts to restore the prior secondary-panel snapshots.
 
 ## Install
 
@@ -80,17 +89,22 @@ and keeps the saved sync state.
 ## How it works
 
 The watcher listens for changes to Plasma's applet settings, waits half a
-second for each edit to finish, then reads the `launchers` setting from every
-supported task manager and compares it with the last saved value. It also runs
-a safety check every 60 seconds.
+second for each edit to finish, then compares every secondary panel with the
+primary snapshot. It also runs a safety check every 60 seconds.
+
+The panel synchronizer snapshots the panel on screen 0, including panel
+properties, widget types, widget order, recursive widget configuration, and
+System Tray settings. Monitor-specific containment metadata and global
+shortcuts are deliberately excluded. Existing matching widgets are updated in
+place so their Plasma instance IDs remain stable; a secondary panel is rebuilt
+only when its widget structure differs.
 
 If `inotify` is not available, the service checks every two seconds and tries
 to restore the event watch once a minute.
 
-- One changed taskbar wins.
-- Several taskbars with the same change win together.
-- If taskbars have different changes, screen 0 wins.
-- If screen 0 has no task manager, the first task manager wins.
+Screen 0 always wins. Changes made on a secondary panel are reverted on the
+next sync pass. This makes conflict resolution predictable and prevents three
+panels from gradually drifting apart.
 
 Plasma stores launcher settings separately from the task manager's live view.
 After a write, the app runs `kbuildsycoca6 --noincremental`. The cache event

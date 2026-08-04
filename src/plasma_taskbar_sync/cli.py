@@ -20,6 +20,7 @@ from plasma_taskbar_sync.events import (
     plasma_config_path,
 )
 from plasma_taskbar_sync.model import TaskManager
+from plasma_taskbar_sync.panels import backup_plasma_config, sync_primary_panel
 from plasma_taskbar_sync.plasma import (
     PlasmaClient,
     find_kbuildsycoca,
@@ -40,6 +41,7 @@ _CONFLICT_MESSAGE = (
 _EXPECTED_ERRORS = (
     json.JSONDecodeError,
     OSError,
+    RuntimeError,
     subprocess.SubprocessError,
     ValueError,
 )
@@ -185,6 +187,16 @@ def command_once(
     dry_run: bool = False,
 ) -> int:
     with exclusive_lock(_lock_path(state_path)):
+        if isinstance(client, PlasmaClient):
+            panel_preview = sync_primary_panel(client, dry_run=True)
+        else:
+            panel_preview = None
+        if panel_preview is not None and panel_preview.changed and not dry_run:
+            backup_plasma_config(state_path)
+            panel_result = sync_primary_panel(client)
+            client.refresh_launcher_model()
+        else:
+            panel_result = panel_preview
         result = sync_once(client, state_path, dry_run=dry_run)
     if result.managers == 0:
         print("No Plasma task managers found", file=sys.stderr)
@@ -195,6 +207,11 @@ def command_once(
         action = "Would sync" if result.changed else "Already in sync"
     else:
         action = "Synced" if result.changed else "Already in sync"
+    panel_action = "would sync" if dry_run else "synced"
+    if panel_result is not None and panel_result.changed:
+        print(f"Panels {panel_action}: {panel_result.panels} panels")
+    elif panel_result is not None:
+        print(f"Panels already in sync: {panel_result.panels} panels")
     print(f"{action}: {result.managers} task managers")
     return 0
 
@@ -254,6 +271,17 @@ def command_watch(
             if now >= next_sync or event_due:
                 try:
                     with exclusive_lock(_lock_path(state_path)):
+                        panel_preview = (
+                            sync_primary_panel(client, dry_run=True)
+                            if isinstance(client, PlasmaClient)
+                            else None
+                        )
+                        if panel_preview is not None and panel_preview.changed:
+                            backup_plasma_config(state_path)
+                            panel_result = sync_primary_panel(client)
+                            client.refresh_launcher_model()
+                        else:
+                            panel_result = panel_preview
                         result = sync_once(client, state_path)
                     if result.conflict:
                         print(
@@ -264,6 +292,12 @@ def command_watch(
                     if result.changed:
                         print(
                             f"Synced {result.managers} task managers",
+                            flush=True,
+                        )
+                    if panel_result is not None and panel_result.changed:
+                        detail = " (widget structure rebuilt)" if panel_result.rebuilt else ""
+                        print(
+                            f"Synced {panel_result.panels} panels from primary{detail}",
                             flush=True,
                         )
                     last_error = None
