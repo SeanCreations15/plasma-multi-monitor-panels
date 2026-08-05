@@ -1,4 +1,4 @@
-# Plasma Panel Sync
+# Plasma Multi-Monitor Panels
 
 Keep complete KDE Plasma panels synchronized across multiple displays.
 
@@ -14,8 +14,8 @@ the service attempts to restore the prior secondary-panel snapshots.
 ## Install
 
 ```sh
-git clone https://github.com/SeanCreations15/plasma-taskbar-sync.git \
-&& cd plasma-taskbar-sync \
+git clone https://github.com/SeanCreations15/plasma-multi-monitor-panels.git \
+&& cd plasma-multi-monitor-panels \
 && ./install.sh
 ```
 
