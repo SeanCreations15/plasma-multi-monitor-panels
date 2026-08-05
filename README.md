@@ -159,4 +159,5 @@ panels are not changed.
 
 ## License
 
-Licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE).
+Licensed under the Mozilla Public License 2.0. See [LICENSE](LICENSE). Copyright
+and contribution details are recorded in [COPYRIGHT.md](COPYRIGHT.md).
