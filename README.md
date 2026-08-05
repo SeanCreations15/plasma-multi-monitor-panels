@@ -14,7 +14,7 @@ the service attempts to restore the prior secondary-panel snapshots.
 ## Install
 
 ```sh
-git clone https://github.com/SleepyStew/plasma-taskbar-sync.git \
+git clone https://github.com/SeanCreations15/plasma-taskbar-sync.git \
 && cd plasma-taskbar-sync \
 && ./install.sh
 ```
@@ -36,9 +36,15 @@ Check the setup:
 plasma-taskbar-sync status
 ```
 
-## Background
+## Project history
 
-I was searching through Plasma's settings desperately trying to find a way to put the taskbar on all of my monitors. With no luck, I did some research and after much frustrated googling, I discovered Plasma does not currently support having a synced taskbar across monitors, so I made it myself.
+This repository is a maintained fork of
+[SleepyStew/plasma-taskbar-sync](https://github.com/SleepyStew/plasma-taskbar-sync).
+It extends the original task-manager synchronization utility to keep complete
+panels synchronized and to accept edits made on any display.
+
+The project exists because Plasma does not provide a built-in way to maintain
+the same panel layout and pinned applications across multiple monitors.
 
 ## Requirements
 
@@ -86,8 +92,8 @@ and keeps the saved sync state.
 ## How it works
 
 The watcher listens for changes to Plasma's applet settings, waits half a
-second for each edit to finish, then compares every secondary panel with the
-primary snapshot. It also runs a safety check every 60 seconds.
+second for each edit to finish, then compares every panel with the last layout
+on which all displays agreed. It also runs a safety check every 60 seconds.
 
 The panel synchronizer remembers the last layout agreed by all displays. It
 compares each live panel with that snapshot to identify which display changed,
@@ -110,7 +116,6 @@ Plasma stores launcher settings separately from the task manager's live view.
 After a write, the app runs `kbuildsycoca6 --noincremental`. The cache event
 prompts Plasma to redraw the launcher list at once. This runs only after a real
 change, not on every check.
-
 
 ## Files and saved state
 
