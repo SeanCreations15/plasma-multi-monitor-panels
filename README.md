@@ -2,9 +2,12 @@
 
 Keep complete KDE Plasma panels synchronized across multiple displays.
 
-The service watches Plasma's settings for changes. Add, remove, configure, or
-move a panel widget on any display and the change is copied to every other
-display. Panel layout and task-manager launchers are synchronized too.
+The service detects KDE's connected displays and primary output. On first run,
+it uses the existing panel on the primary display as the source, creates panels
+on displays that do not have one, and copies the complete panel layout to them.
+Afterwards, add, remove, configure, or move a panel widget on any synchronized
+display and the change is copied to every other display. Panel layout and
+task-manager launchers are synchronized too.
 
 Before changing panels, the service stores timestamped configuration backups
 under `~/.local/state/plasma-taskbar-sync/backups/` and retains the ten newest.
@@ -19,8 +22,8 @@ git clone https://github.com/SeanCreations15/plasma-multi-monitor-panels.git \
 && ./install.sh
 ```
 
-The installer builds a Python zipapp from the cloned source. It
-has no external dependencies.
+The installer builds a Python zipapp from the cloned source. It has no
+third-party Python dependencies.
 
 It installs two files:
 
@@ -46,13 +49,38 @@ panels synchronized and to accept edits made on any display.
 The project exists because Plasma does not provide a built-in way to maintain
 the same panel layout and pinned applications across multiple monitors.
 
+## First run
+
+The service waits for Plasma and KScreen to report the same stable display
+layout before making changes. It maps Plasma's temporary screen numbers to
+KScreen connector names using logical screen geometry, then uses KScreen's
+display priority to find the real primary output.
+
+- If the primary display already has a panel, that panel is the initial source.
+- If the primary display has no panel, the existing panel on the next-highest
+  priority display becomes the source.
+- Missing panels are created and assigned to their displays before the source
+  layout is applied.
+- If no connected display has a panel, the service makes no changes and asks
+  the user to add one panel first.
+- If a display has multiple panels, the service makes no changes because
+  choosing a synchronization group would be ambiguous.
+- Mirrored display configurations are left unchanged because they do not map
+  safely to independent Plasma panels.
+
+The service backs up Plasma's configuration before creating or updating any
+panel. A newly connected display is handled by the same process. During Plasma
+startup or monitor hot-plug transitions, incomplete or inconsistent display
+data is retried without changing panels.
+
 ## Requirements
 
-- KDE Plasma 6
+- KDE Plasma 6.3 or newer
 - Two or more displays with a standard Task Manager or Icons-only Task Manager
 - Python 3.10 or newer
 - Qt 6 `qdbus`, named `qdbus6` or `qdbus-qt6`
 - KDE's `kbuildsycoca6` tool
+- KDE's `kscreen-doctor` tool
 - Git, `install`, and `mktemp`
 - Linux with `inotify`
 - A systemd user session for automatic startup
@@ -92,8 +120,9 @@ and keeps the saved sync state.
 ## How it works
 
 The watcher listens for changes to Plasma's applet settings, waits half a
-second for each edit to finish, then compares every panel with the last layout
-on which all displays agreed. It also runs a safety check every 60 seconds.
+second for each edit to finish, then rediscovers the connected outputs and
+compares every panel with the last layout on which all displays agreed. It also
+runs a safety check every 60 seconds.
 
 The panel synchronizer remembers the last layout agreed by all displays. It
 compares each live panel with that snapshot to identify which display changed,
@@ -109,8 +138,10 @@ to restore the event watch once a minute.
 
 One edited panel wins regardless of its display. If multiple panels receive
 the same edit before a sync pass, that shared edit wins. If multiple panels
-receive incompatible edits at the same time, screen 0 wins as the deterministic
-conflict fallback.
+receive incompatible edits at the same time, the panel on KDE's primary
+display wins as the deterministic conflict fallback. If the primary display
+has no panel, the panel on the connected output with the next-highest priority
+wins.
 
 Plasma stores launcher settings separately from the task manager's live view.
 After a write, the app runs `kbuildsycoca6 --noincremental`. The cache event

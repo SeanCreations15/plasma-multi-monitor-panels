@@ -1,3 +1,3 @@
-"""Sync pinned apps across KDE Plasma task managers."""
+"""Create and synchronize KDE Plasma panels across connected displays."""
 
-__version__ = "0.4.1"
+__version__ = "0.5.0"

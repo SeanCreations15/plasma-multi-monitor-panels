@@ -19,6 +19,7 @@ from plasma_taskbar_sync.events import (
     InotifyEventSource,
     plasma_config_path,
 )
+from plasma_taskbar_sync.displays import find_kscreen_doctor
 from plasma_taskbar_sync.model import TaskManager
 from plasma_taskbar_sync.panels import backup_plasma_config, sync_panels
 from plasma_taskbar_sync.plasma import (
@@ -35,7 +36,7 @@ from plasma_taskbar_sync.state import (
 
 
 _CONFLICT_MESSAGE = (
-    "Conflicting edits found; screen 0 won when present, "
+    "Conflicting edits found; the KDE primary display won when present, "
     "otherwise the first task manager won"
 )
 _EXPECTED_ERRORS = (
@@ -187,19 +188,31 @@ def command_once(
     dry_run: bool = False,
 ) -> int:
     with exclusive_lock(_lock_path(state_path)):
+        layout = None
         if isinstance(client, PlasmaClient):
-            panel_preview = sync_panels(client, state_path, dry_run=True)
+            layout = client.display_layout()
+            panel_preview = sync_panels(
+                client,
+                state_path,
+                layout,
+                dry_run=True,
+            )
         else:
             panel_preview = None
         if panel_preview is not None and not dry_run:
             if panel_preview.changed:
                 backup_plasma_config(state_path)
-            panel_result = sync_panels(client, state_path)
+            panel_result = sync_panels(client, state_path, layout)
             if panel_result.changed:
                 client.refresh_launcher_model()
         else:
             panel_result = panel_preview
-        result = sync_once(client, state_path, dry_run=dry_run)
+        result = sync_once(
+            client,
+            state_path,
+            dry_run=dry_run,
+            primary_screen=layout.primary_screen if layout is not None else 0,
+        )
     if result.managers == 0:
         print("No Plasma task managers found", file=sys.stderr)
         return 1
@@ -211,9 +224,14 @@ def command_once(
         action = "Synced" if result.changed else "Already in sync"
     panel_action = "would sync" if dry_run else "synced"
     if panel_result is not None and panel_result.changed:
+        created = (
+            f", created {panel_result.created} missing"
+            if panel_result.created
+            else ""
+        )
         print(
             f"Panels {panel_action} from screen {panel_result.source_screen}: "
-            f"{panel_result.panels} panels"
+            f"{panel_result.panels} panels{created}"
         )
     elif panel_result is not None:
         print(f"Panels already in sync: {panel_result.panels} panels")
@@ -276,20 +294,37 @@ def command_watch(
             if now >= next_sync or event_due:
                 try:
                     with exclusive_lock(_lock_path(state_path)):
-                        panel_preview = (
-                            sync_panels(client, state_path, dry_run=True)
-                            if isinstance(client, PlasmaClient)
-                            else None
-                        )
+                        if isinstance(client, PlasmaClient):
+                            layout = client.display_layout()
+                            panel_preview = sync_panels(
+                                client,
+                                state_path,
+                                layout,
+                                dry_run=True,
+                            )
+                        else:
+                            layout = None
+                            panel_preview = None
                         if panel_preview is not None:
                             if panel_preview.changed:
                                 backup_plasma_config(state_path)
-                            panel_result = sync_panels(client, state_path)
+                            panel_result = sync_panels(
+                                client,
+                                state_path,
+                                layout,
+                            )
                             if panel_result.changed:
                                 client.refresh_launcher_model()
                         else:
                             panel_result = panel_preview
-                        result = sync_once(client, state_path)
+                        if layout is None:
+                            result = sync_once(client, state_path)
+                        else:
+                            result = sync_once(
+                                client,
+                                state_path,
+                                primary_screen=layout.primary_screen,
+                            )
                     if result.conflict:
                         print(
                             _CONFLICT_MESSAGE,
@@ -303,14 +338,20 @@ def command_watch(
                         )
                     if panel_result is not None and panel_result.changed:
                         detail = " (widget structure rebuilt)" if panel_result.rebuilt else ""
+                        created = (
+                            f", created {panel_result.created} missing"
+                            if panel_result.created
+                            else ""
+                        )
                         print(
                             f"Synced {panel_result.panels} panels from screen "
-                            f"{panel_result.source_screen}{detail}",
+                            f"{panel_result.source_screen}{created}{detail}",
                             flush=True,
                         )
                     if panel_result is not None and panel_result.conflict:
                         print(
-                            "Conflicting panel edits found; primary screen 0 won",
+                            "Conflicting panel edits found; the KDE primary "
+                            "display won",
                             file=sys.stderr,
                             flush=True,
                         )
@@ -434,13 +475,27 @@ def command_doctor(state_path: Path, qdbus: str | None = None) -> int:
         problems.append(str(error))
         print(f"kbuildsycoca: missing ({error})")
 
-    if state is None or qdbus_path is None or kbuildsycoca_path is None:
+    try:
+        kscreen_doctor_path = find_kscreen_doctor()
+        print(f"kscreen-doctor: {kscreen_doctor_path}")
+    except FileNotFoundError as error:
+        kscreen_doctor_path = None
+        problems.append(str(error))
+        print(f"kscreen-doctor: missing ({error})")
+
+    if (
+        state is None
+        or qdbus_path is None
+        or kbuildsycoca_path is None
+        or kscreen_doctor_path is None
+    ):
         print("Plasma connection: not checked")
         print(f"Result: {len(problems)} problem(s) found")
         return 1
 
     client = PlasmaClient(qdbus_path)
     try:
+        layout = client.display_layout()
         managers = client.task_managers(state)
     except _EXPECTED_ERRORS as error:
         print(f"Plasma connection: failed ({concise_error(error)})")
@@ -448,6 +503,14 @@ def command_doctor(state_path: Path, qdbus: str | None = None) -> int:
         return 1
 
     print("Plasma connection: OK")
+    primary_name = layout.name_for_screen(layout.primary_screen) or "unknown"
+    print(f"Connected outputs: {len(layout.outputs)}")
+    print(f"Primary output: {primary_name} (screen {layout.primary_screen})")
+    for output in layout.outputs:
+        print(
+            f"  {output.output.name}: screen {output.screen}, "
+            f"priority {output.output.priority}"
+        )
     print(f"Task managers: {len(managers)}")
     print(f"Taskbars in sync: {'yes' if _managers_in_sync(managers) else 'no'}")
     for manager in managers:
@@ -599,7 +662,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="plasma-taskbar-sync",
         description=(
-            "Keep pinned apps and their order in sync across KDE Plasma taskbars."
+            "Create and synchronize KDE Plasma panels across connected displays."
         ),
     )
     parser.add_argument(

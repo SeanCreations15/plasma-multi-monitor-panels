@@ -9,6 +9,13 @@ import shutil
 import time
 from typing import Any, Protocol
 
+from plasma_taskbar_sync.displays import (
+    DisplayLayout,
+    DisplayOutput,
+    Geometry,
+    MappedOutput,
+)
+
 
 PANEL_QUERY_SCRIPT = r"""
 function readTree(applet, path) {
@@ -98,6 +105,7 @@ class PanelSyncResult:
     rebuilt: bool = False
     source_screen: int = 0
     conflict: bool = False
+    created: int = 0
 
 
 class PanelScriptClient(Protocol):
@@ -333,30 +341,107 @@ for (var p = 0; p < destinationIds.length; ++p) {{
 """
 
 
+def _create_panels_script(screens: list[int]) -> str:
+    targets = json.dumps(screens)
+    return f"""
+var targetScreens = {targets};
+var created = [];
+for (var i = 0; i < targetScreens.length; ++i) {{
+    var panel = new Panel;
+    panel.screen = targetScreens[i];
+    created.push(panel.id);
+}}
+print(JSON.stringify(created));
+"""
+
+
+def _remove_panels_script(panel_ids: list[int]) -> str:
+    targets = json.dumps(panel_ids)
+    return f"""
+var targetPanels = {targets};
+for (var i = 0; i < targetPanels.length; ++i) {{
+    var panel = panelById(targetPanels[i]);
+    if (panel) panel.remove();
+}}
+"""
+
+
+def _active_panels(
+    panels: list[dict[str, Any]], layout: DisplayLayout
+) -> tuple[list[dict[str, Any]], dict[int, dict[str, Any]]]:
+    active_screens = set(layout.screens)
+    active = [panel for panel in panels if panel["screen"] in active_screens]
+    by_screen: dict[int, dict[str, Any]] = {}
+    for panel in active:
+        screen = panel["screen"]
+        if screen in by_screen:
+            name = layout.name_for_screen(screen) or f"screen {screen}"
+            raise ValueError(
+                f"multiple panels found on {name}; automatic panel grouping "
+                "is not supported yet"
+            )
+        by_screen[screen] = panel
+    return active, by_screen
+
+
+def _fallback_source(
+    by_screen: dict[int, dict[str, Any]], layout: DisplayLayout
+) -> dict[str, Any]:
+    primary = by_screen.get(layout.primary_screen)
+    if primary is not None:
+        return primary
+    for output in layout.outputs:
+        panel = by_screen.get(output.screen)
+        if panel is not None:
+            return panel
+    raise ValueError(
+        "no existing panel was found on any connected output; add one Plasma "
+        "panel and retry"
+    )
+
+
 def sync_panels(
     client: PanelScriptClient,
     state_path: Path,
+    layout: DisplayLayout | None = None,
     *,
     dry_run: bool = False,
 ) -> PanelSyncResult:
     """Propagate the panel changed since the last agreed snapshot."""
 
     panels = query_panels(client)
-    primary = [panel for panel in panels if panel["screen"] == 0]
-    if len(primary) != 1:
-        raise ValueError(
-            f"expected exactly one panel on primary screen 0; found {len(primary)}"
+    if layout is None:
+        screens = sorted({panel["screen"] for panel in panels if panel["screen"] >= 0})
+        if not screens:
+            raise ValueError("no Plasma panels found")
+        # Compatibility path for callers that do not perform KScreen mapping.
+        layout = DisplayLayout(
+            tuple(
+                MappedOutput(
+                    DisplayOutput(
+                        screen,
+                        f"screen-{screen}",
+                        screen + 1,
+                        Geometry(0, 0, 1, 1),
+                    ),
+                    screen,
+                )
+                for screen in screens
+            ),
+            0 if 0 in screens else screens[0],
         )
+    active, by_screen = _active_panels(panels, layout)
+    source = _fallback_source(by_screen, layout)
     previous = _read_panel_state(state_path)
     conflict = False
-    if previous is None:
-        source = primary[0]
-    else:
+    if previous is not None:
         edited = [
-            panel for panel in panels if not panels_equivalent(previous, _profile(panel))
+            panel
+            for panel in active
+            if not panels_equivalent(previous, _profile(panel))
         ]
         if not edited:
-            source = primary[0]
+            source = _fallback_source(by_screen, layout)
         elif len(edited) == 1:
             source = edited[0]
         elif all(
@@ -365,10 +450,35 @@ def sync_panels(
         ):
             source = edited[0]
         else:
-            source = primary[0]
+            source = _fallback_source(by_screen, layout)
             conflict = True
 
-    destinations = [panel for panel in panels if panel["id"] != source["id"]]
+    missing_screens = [
+        screen for screen in layout.screens if screen not in by_screen
+    ]
+    created_ids: list[int] = []
+    if missing_screens and not dry_run:
+        original_ids = {panel["id"] for panel in panels}
+        client.evaluate(_create_panels_script(missing_screens))
+        panels = query_panels(client)
+        created_ids = [
+            panel["id"] for panel in panels if panel["id"] not in original_ids
+        ]
+        try:
+            active, by_screen = _active_panels(panels, layout)
+            still_missing = [
+                screen for screen in layout.screens if screen not in by_screen
+            ]
+            if still_missing or len(created_ids) != len(missing_screens):
+                raise RuntimeError(
+                    "Plasma did not create exactly one panel on every missing output"
+                )
+        except (RuntimeError, ValueError):
+            if created_ids:
+                client.evaluate(_remove_panels_script(created_ids))
+            raise
+
+    destinations = [panel for panel in active if panel["id"] != source["id"]]
     changed = [panel for panel in destinations if not panels_match(source, panel)]
     rebuilt = any(
         [widget.get("type") for widget in panel["widgets"]]
@@ -376,30 +486,38 @@ def sync_panels(
         for panel in changed
     )
     if changed and not dry_run:
-        originals = {panel["id"]: panel for panel in changed}
+        originals = {
+            panel["id"]: panel
+            for panel in changed
+            if panel["id"] not in created_ids
+        }
         client.evaluate(_apply_script(source, [panel["id"] for panel in changed]))
         verified = query_panels(client)
         verified_by_id = {panel["id"]: panel for panel in verified}
+        destination_ids = [panel["id"] for panel in changed]
         failed = [
             panel_id
-            for panel_id in originals
+            for panel_id in destination_ids
             if panel_id not in verified_by_id
             or not panels_match(source, verified_by_id[panel_id])
         ]
         if failed:
             for panel_id, original in originals.items():
                 client.evaluate(_apply_script(original, [panel_id]))
+            if created_ids:
+                client.evaluate(_remove_panels_script(created_ids))
             raise RuntimeError(
                 "panel synchronization did not verify; restored destination panels"
             )
     if not dry_run:
         _write_panel_state(state_path, source)
     return PanelSyncResult(
-        panels=len(destinations) + 1,
-        changed=bool(changed),
+        panels=len(layout.screens),
+        changed=bool(changed or missing_screens),
         rebuilt=rebuilt,
         source_screen=source["screen"],
         conflict=conflict,
+        created=len(missing_screens),
     )
 
 

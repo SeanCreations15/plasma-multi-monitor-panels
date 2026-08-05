@@ -19,6 +19,12 @@ from plasma_taskbar_sync.cli import (
     main,
 )
 from plasma_taskbar_sync.events import EventSource
+from plasma_taskbar_sync.displays import (
+    DisplayLayout,
+    DisplayOutput,
+    Geometry,
+    MappedOutput,
+)
 from plasma_taskbar_sync.model import SyncResult, TaskManager
 from plasma_taskbar_sync.state import State
 
@@ -29,6 +35,21 @@ class StatusClient:
 
     def task_managers(self, _state: State) -> list[TaskManager]:
         return self.managers
+
+    def display_layout(self) -> DisplayLayout:
+        return DisplayLayout(
+            (
+                MappedOutput(
+                    DisplayOutput(1, "DP-1", 1, Geometry(0, 0, 1920, 1080)),
+                    0,
+                ),
+                MappedOutput(
+                    DisplayOutput(2, "DP-2", 2, Geometry(1920, 0, 1920, 1080)),
+                    1,
+                ),
+            ),
+            0,
+        )
 
 
 class FailingStatusClient:
@@ -508,7 +529,7 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         text = output.getvalue()
-        self.assertIn("Plasma Taskbar Sync: 0.4.1", text)
+        self.assertIn("Plasma Taskbar Sync: 0.5.0", text)
         self.assertIn("Service state: active", text)
         self.assertIn("Task managers: 2", text)
         self.assertIn("Screen 0: panel 10, widget 20", text)

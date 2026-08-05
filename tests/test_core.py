@@ -72,6 +72,14 @@ class LauncherChoiceTests(unittest.TestCase):
         self.assertEqual(decision.launchers, "")
         self.assertFalse(decision.conflict)
 
+    def test_first_sync_uses_mapped_primary_screen(self) -> None:
+        decision = choose_launchers(
+            [manager(1, 0, "secondary"), manager(2, 2, "primary")],
+            empty_state(),
+            primary_screen=2,
+        )
+        self.assertEqual(decision.launchers, "primary")
+
     def test_one_reorder_wins(self) -> None:
         old = saved_state("a,b", {1: "a,b", 2: "a,b"})
         decision = choose_launchers(
@@ -104,6 +112,16 @@ class LauncherChoiceTests(unittest.TestCase):
             old,
         )
         self.assertEqual(decision.launchers, "b,c")
+        self.assertTrue(decision.conflict)
+
+    def test_conflict_uses_mapped_primary_screen(self) -> None:
+        old = saved_state("a", {1: "a", 2: "a"})
+        decision = choose_launchers(
+            [manager(1, 0, "secondary"), manager(2, 2, "primary")],
+            old,
+            primary_screen=2,
+        )
+        self.assertEqual(decision.launchers, "primary")
         self.assertTrue(decision.conflict)
 
     def test_conflict_without_screen_zero_uses_first_manager(self) -> None:

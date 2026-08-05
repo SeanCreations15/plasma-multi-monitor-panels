@@ -1,11 +1,13 @@
 # Contributing
 
-Thanks for helping with Plasma Taskbar Sync.
+Thanks for helping with Plasma Multi-Monitor Panels.
 
 ## Scope
 
-Keep the project focused on pinned apps and their order across standard Plasma
-task managers. Panel layouts, themes, and other widgets are outside its scope.
+Keep the project focused on creating and synchronizing standard Plasma panels
+across connected displays. Panel properties, widget layouts, System Tray
+configuration, and task-manager launchers are in scope. Desktop themes,
+wallpapers, and general display configuration are outside its scope.
 
 The project has one install path: clone the repository and run `./install.sh`.
 Do not add Python package metadata, release archives, downloaded dependencies,
@@ -26,6 +28,8 @@ Remove private app names from the launcher list if needed.
 ## Making a change
 
 - Put sync choices in `core.py`.
+- Put KScreen discovery and output mapping in `displays.py`.
+- Put complete-panel snapshot and replication logic in `panels.py`.
 - Put Plasma reads, writes, and refresh calls in `plasma.py`.
 - Put Linux file-event handling in `events.py`.
 - Keep command output and argument handling in `cli.py`.

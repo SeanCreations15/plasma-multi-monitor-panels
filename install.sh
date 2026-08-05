@@ -28,6 +28,11 @@ for command_name in python3 install mktemp; do
     fi
 done
 
+if ! command -v kscreen-doctor >/dev/null 2>&1; then
+    echo "Missing command: kscreen-doctor (install KDE's KScreen package)" >&2
+    exit 1
+fi
+
 if ! python3 -c 'import sys; raise SystemExit(sys.version_info < (3, 10))'; then
     echo "Python 3.10 or newer is required." >&2
     exit 1

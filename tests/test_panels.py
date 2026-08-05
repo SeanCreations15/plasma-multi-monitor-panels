@@ -5,6 +5,12 @@ from pathlib import Path
 import tempfile
 import unittest
 
+from plasma_taskbar_sync.displays import (
+    DisplayLayout,
+    DisplayOutput,
+    Geometry,
+    MappedOutput,
+)
 from plasma_taskbar_sync.panels import panels_match, query_panels, sync_panels
 
 
@@ -29,6 +35,22 @@ def panel(panel_id: int, screen: int, value: str = "same") -> dict[str, object]:
             }
         ],
     }
+
+
+def layout(primary: int, *screens: int) -> DisplayLayout:
+    mapped = tuple(
+        MappedOutput(
+            DisplayOutput(
+                output_id=screen + 10,
+                name=f"DP-{screen}",
+                priority=1 if screen == primary else screen + 2,
+                geometry=Geometry(screen * 1920, 0, 1920, 1080),
+            ),
+            screen,
+        )
+        for screen in screens
+    )
+    return DisplayLayout(mapped, primary)
 
 
 class ScriptClient:
@@ -127,6 +149,80 @@ class PanelTests(unittest.TestCase):
         client = ScriptClient([[{"id": 1}]])
         with self.assertRaises(ValueError):
             query_panels(client)
+
+    def test_real_primary_display_is_initial_source(self) -> None:
+        before = [panel(1, 0, "secondary"), panel(2, 1, "primary")]
+        after = [panel(1, 0, "primary"), panel(2, 1, "primary")]
+        client = ScriptClient([before, after])
+        with tempfile.TemporaryDirectory() as directory:
+            result = sync_panels(
+                client,
+                Path(directory) / "state.json",
+                layout(1, 1, 0),
+            )
+        self.assertEqual(result.source_screen, 1)
+        self.assertTrue(result.changed)
+
+    def test_missing_panels_are_created_and_receive_source_profile(self) -> None:
+        source = panel(1, 1, "source")
+        created_primary = panel(2, 0, "blank")
+        created_third = panel(3, 2, "blank")
+        synced = [
+            source,
+            panel(2, 0, "source"),
+            panel(3, 2, "source"),
+        ]
+        client = ScriptClient(
+            [
+                [source],
+                [source, created_primary, created_third],
+                synced,
+            ]
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            result = sync_panels(
+                client,
+                Path(directory) / "state.json",
+                layout(0, 0, 1, 2),
+            )
+        self.assertEqual(result.created, 2)
+        self.assertEqual(result.panels, 3)
+        self.assertEqual(result.source_screen, 1)
+        self.assertIn("panel.screen = targetScreens[i]", client.scripts[1])
+        self.assertIn("var destinationIds = [2, 3]", client.scripts[3])
+
+    def test_missing_panel_dry_run_does_not_create(self) -> None:
+        client = ScriptClient([[panel(1, 0)]])
+        with tempfile.TemporaryDirectory() as directory:
+            result = sync_panels(
+                client,
+                Path(directory) / "state.json",
+                layout(0, 0, 1),
+                dry_run=True,
+            )
+        self.assertTrue(result.changed)
+        self.assertEqual(result.created, 1)
+        self.assertEqual(len(client.scripts), 1)
+
+    def test_multiple_panels_on_one_output_are_not_overwritten(self) -> None:
+        client = ScriptClient([[panel(1, 0), panel(2, 0)]])
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "multiple panels"):
+                sync_panels(
+                    client,
+                    Path(directory) / "state.json",
+                    layout(0, 0, 1),
+                )
+
+    def test_no_existing_panel_requires_user_source(self) -> None:
+        client = ScriptClient([[]])
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "add one Plasma panel"):
+                sync_panels(
+                    client,
+                    Path(directory) / "state.json",
+                    layout(0, 0, 1),
+                )
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 [Unit]
 Description=Keep KDE Plasma panels synchronized across displays
 PartOf=graphical-session.target
-After=graphical-session.target
+After=graphical-session.target plasma-plasmashell.service
 
 [Service]
 Type=simple

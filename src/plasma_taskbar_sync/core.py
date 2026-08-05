@@ -22,10 +22,15 @@ class PlasmaSyncClient(Protocol):
     def set_all_launchers(self, launchers: str) -> None: ...
 
 
-def _primary_manager(managers: list[TaskManager]) -> TaskManager:
-    """Return the screen 0 manager, or the first manager when it is absent."""
+def _primary_manager(
+    managers: list[TaskManager], primary_screen: int
+) -> TaskManager:
+    """Return the primary-screen manager, or the first available manager."""
 
-    return next((manager for manager in managers if manager.screen == 0), managers[0])
+    return next(
+        (manager for manager in managers if manager.screen == primary_screen),
+        managers[0],
+    )
 
 
 def effective_launchers(root: str, general: str, previous: str | None) -> str:
@@ -45,14 +50,19 @@ def effective_launchers(root: str, general: str, previous: str | None) -> str:
     return general if general else root
 
 
-def choose_launchers(managers: list[TaskManager], state: State) -> SyncDecision:
+def choose_launchers(
+    managers: list[TaskManager],
+    state: State,
+    *,
+    primary_screen: int = 0,
+) -> SyncDecision:
     """Choose the list changed since the last pass."""
 
     if not managers:
         return SyncDecision(None)
 
     if state.get("selected") is None and not state.get("widgets"):
-        return SyncDecision(_primary_manager(managers).launchers)
+        return SyncDecision(_primary_manager(managers, primary_screen).launchers)
 
     saved_widgets = state.get("widgets", {})
     known_widget_ids = (
@@ -69,7 +79,7 @@ def choose_launchers(managers: list[TaskManager], state: State) -> SyncDecision:
         value = (
             selected
             if isinstance(selected, str)
-            else _primary_manager(managers).launchers
+            else _primary_manager(managers, primary_screen).launchers
         )
         return SyncDecision(value)
 
@@ -77,7 +87,10 @@ def choose_launchers(managers: list[TaskManager], state: State) -> SyncDecision:
     if len(changed_values) == 1:
         return SyncDecision(changed[0].launchers)
 
-    return SyncDecision(_primary_manager(managers).launchers, conflict=True)
+    return SyncDecision(
+        _primary_manager(managers, primary_screen).launchers,
+        conflict=True,
+    )
 
 
 def sync_once(
@@ -85,12 +98,17 @@ def sync_once(
     state_path: Path,
     *,
     dry_run: bool = False,
+    primary_screen: int = 0,
 ) -> SyncResult:
     """Run one sync pass against a Plasma client."""
 
     state = read_state(state_path)
     managers = client.task_managers(state)
-    decision = choose_launchers(managers, state)
+    decision = choose_launchers(
+        managers,
+        state,
+        primary_screen=primary_screen,
+    )
     if decision.launchers is None:
         return SyncResult(
             managers=0,

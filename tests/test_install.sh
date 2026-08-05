@@ -16,7 +16,7 @@ printf '%s\n' "$*" >> "${SYSTEMCTL_LOG}"
 EOF
 chmod 755 "${test_bin}/systemctl"
 
-for command_name in qdbus6 kbuildsycoca6; do
+for command_name in qdbus6 kbuildsycoca6 kscreen-doctor; do
     cat > "${test_bin}/${command_name}" <<'EOF'
 #!/bin/sh
 exit 0

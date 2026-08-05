@@ -9,6 +9,11 @@ import subprocess
 from typing import Any
 
 from plasma_taskbar_sync.core import effective_launchers
+from plasma_taskbar_sync.displays import (
+    DisplayLayout,
+    discover_display_layout,
+    find_kscreen_doctor,
+)
 from plasma_taskbar_sync.model import TaskManager
 from plasma_taskbar_sync.state import State, previous_for_widget
 
@@ -90,6 +95,7 @@ class PlasmaClient:
     def __init__(self, qdbus: str | None = None, timeout: float = 8) -> None:
         self.qdbus = find_qdbus(qdbus)
         self.kbuildsycoca = find_kbuildsycoca()
+        self.kscreen_doctor = find_kscreen_doctor()
         self.timeout = timeout
 
     def evaluate(self, script: str) -> str:
@@ -121,6 +127,15 @@ class PlasmaClient:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=CACHE_REFRESH_TIMEOUT,
+        )
+
+    def display_layout(self) -> DisplayLayout:
+        """Return connected outputs mapped to Plasma screen numbers."""
+
+        return discover_display_layout(
+            self,
+            self.kscreen_doctor,
+            timeout=self.timeout,
         )
 
     def task_managers(self, state: State) -> list[TaskManager]:
