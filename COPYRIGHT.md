@@ -21,7 +21,12 @@ tests needed for that launcher-list synchronization.
 The inherited program did **not** create panels, synchronize complete panel
 layouts, map panels reliably to physical monitor connectors, determine the
 actual KDE primary display, or provide the present startup and monitor
-hot-plug safeguards.
+hot-plug safeguards. It did not create or author KDE Plasma's panels, Task
+Manager, System Tray, Application Launcher, Digital Clock, or any other Plasma
+widget; those are separate KDE Plasma components. Its code only read and wrote
+the pinned-launcher setting exposed by existing Task Manager widgets. It also
+did not implement this project's later code for discovering, copying, creating,
+or synchronizing complete panels and their widget configurations.
 
 ## SeanCreations15 contribution
 
