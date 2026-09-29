@@ -5,13 +5,13 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from plasma_taskbar_sync.plasma import (
+from panel_sync.plasma import (
     QUERY_SCRIPT,
     PlasmaClient,
     find_kbuildsycoca,
     find_qdbus,
 )
-from plasma_taskbar_sync.state import empty_state
+from panel_sync.state import empty_state
 
 
 class StubClient(PlasmaClient):
@@ -89,13 +89,13 @@ class DiscoveryTests(unittest.TestCase):
 
 class QdbusTests(unittest.TestCase):
     def test_explicit_command_must_exist(self) -> None:
-        with patch("plasma_taskbar_sync.plasma.shutil.which", return_value=None):
+        with patch("panel_sync.plasma.shutil.which", return_value=None):
             with self.assertRaises(FileNotFoundError):
                 find_qdbus("missing-qdbus")
 
     def test_qdbus6_is_preferred(self) -> None:
         with patch(
-            "plasma_taskbar_sync.plasma.shutil.which",
+            "panel_sync.plasma.shutil.which",
             side_effect=lambda name: f"/usr/bin/{name}" if name == "qdbus6" else None,
         ):
             self.assertEqual(find_qdbus(), "/usr/bin/qdbus6")
@@ -103,14 +103,14 @@ class QdbusTests(unittest.TestCase):
 
 class LauncherRefreshTests(unittest.TestCase):
     def test_kbuildsycoca6_is_required(self) -> None:
-        with patch("plasma_taskbar_sync.plasma.shutil.which", return_value=None):
+        with patch("panel_sync.plasma.shutil.which", return_value=None):
             with self.assertRaises(FileNotFoundError):
                 find_kbuildsycoca()
 
     def test_full_cache_rebuild_triggers_launcher_refresh(self) -> None:
         client = PlasmaClient.__new__(PlasmaClient)
         client.kbuildsycoca = "/usr/bin/kbuildsycoca6"
-        with patch("plasma_taskbar_sync.plasma.subprocess.run") as run:
+        with patch("panel_sync.plasma.subprocess.run") as run:
             client.refresh_launcher_model()
         run.assert_called_once_with(
             ["/usr/bin/kbuildsycoca6", "--noincremental"],

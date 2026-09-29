@@ -8,14 +8,14 @@ import shutil
 import subprocess
 from typing import Any
 
-from plasma_taskbar_sync.core import effective_launchers
-from plasma_taskbar_sync.displays import (
+from panel_sync.core import effective_launchers
+from panel_sync.displays import (
     DisplayLayout,
     discover_display_layout,
     find_kscreen_doctor,
 )
-from plasma_taskbar_sync.model import TaskManager
-from plasma_taskbar_sync.state import State, previous_for_widget
+from panel_sync.model import TaskManager
+from panel_sync.state import State, previous_for_widget
 
 
 SUPPORTED_PLUGINS = (

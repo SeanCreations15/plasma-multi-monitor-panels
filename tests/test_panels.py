@@ -5,13 +5,18 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from plasma_taskbar_sync.displays import (
+from panel_sync.displays import (
     DisplayLayout,
     DisplayOutput,
     Geometry,
     MappedOutput,
 )
-from plasma_taskbar_sync.panels import panels_match, query_panels, sync_panels
+from panel_sync.panels import (
+    PANEL_QUERY_SCRIPT,
+    panels_match,
+    query_panels,
+    sync_panels,
+)
 
 
 def tree(value: str, *, tray_id: int | None = None) -> dict[str, object]:
@@ -35,6 +40,19 @@ def panel(panel_id: int, screen: int, value: str = "same") -> dict[str, object]:
             }
         ],
     }
+
+
+def panel_with_default(
+    panel_id: int,
+    screen: int,
+    value: str = "same",
+    *,
+    explicit_default: bool = False,
+) -> dict[str, object]:
+    result = panel(panel_id, screen, value)
+    if explicit_default:
+        result["widgets"][0]["config"]["keys"]["defaultValue"] = "default"
+    return result
 
 
 def layout(primary: int, *screens: int) -> DisplayLayout:
@@ -66,6 +84,20 @@ class ScriptClient:
 
 
 class PanelTests(unittest.TestCase):
+    def test_query_ignores_transient_widget_window_geometry(self) -> None:
+        self.assertIn("popupHeight: true, popupWidth: true", PANEL_QUERY_SCRIPT)
+        self.assertIn('groups[j] === "ConfigDialog"', PANEL_QUERY_SCRIPT)
+
+    def test_query_normalizes_adaptive_clock_date_location(self) -> None:
+        self.assertIn(
+            'widget.type === "org.kde.plasma.digitalclock"',
+            PANEL_QUERY_SCRIPT,
+        )
+        self.assertIn(
+            'widget.readConfig("dateDisplayFormat", "Adaptive")',
+            PANEL_QUERY_SCRIPT,
+        )
+
     def test_systray_instance_id_is_not_compared(self) -> None:
         self.assertTrue(panels_match(panel(1, 0), panel(2, 1)))
 
@@ -101,6 +133,32 @@ class PanelTests(unittest.TestCase):
             )
             before = [panel(1, 0), panel(2, 1, "new"), panel(3, 2)]
             after = [panel(1, 0, "new"), panel(2, 1, "new"), panel(3, 2, "new")]
+            result = sync_panels(ScriptClient([before, after]), state)
+            self.assertEqual(result.source_screen, 1)
+            self.assertTrue(result.changed)
+            self.assertFalse(result.conflict)
+
+    def test_per_screen_baselines_ignore_equivalent_serialization_differences(
+        self,
+    ) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            state = Path(directory) / "state.json"
+            initial = [
+                panel_with_default(1, 0),
+                panel_with_default(2, 1, explicit_default=True),
+                panel_with_default(3, 2, explicit_default=True),
+            ]
+            sync_panels(ScriptClient([initial]), state)
+            before = [
+                panel_with_default(1, 0),
+                panel_with_default(2, 1, "new", explicit_default=True),
+                panel_with_default(3, 2, explicit_default=True),
+            ]
+            after = [
+                panel_with_default(1, 0, "new", explicit_default=True),
+                panel_with_default(2, 1, "new", explicit_default=True),
+                panel_with_default(3, 2, "new", explicit_default=True),
+            ]
             result = sync_panels(ScriptClient([before, after]), state)
             self.assertEqual(result.source_screen, 1)
             self.assertTrue(result.changed)

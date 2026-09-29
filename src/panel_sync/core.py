@@ -6,8 +6,8 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Protocol
 
-from plasma_taskbar_sync.model import SyncDecision, SyncResult, TaskManager
-from plasma_taskbar_sync.state import (
+from panel_sync.model import SyncDecision, SyncResult, TaskManager
+from panel_sync.state import (
     State,
     from_managers,
     previous_for_widget,

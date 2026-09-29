@@ -5,13 +5,13 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from plasma_taskbar_sync.core import (
+from panel_sync.core import (
     choose_launchers,
     effective_launchers,
     sync_once,
 )
-from plasma_taskbar_sync.model import TaskManager
-from plasma_taskbar_sync.state import empty_state, read_state
+from panel_sync.model import TaskManager
+from panel_sync.state import empty_state, read_state
 
 
 def manager(widget: int, screen: int, launchers: str) -> TaskManager:

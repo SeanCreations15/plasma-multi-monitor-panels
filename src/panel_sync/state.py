@@ -9,7 +9,7 @@ import os
 from pathlib import Path
 from typing import Any, Iterator
 
-from plasma_taskbar_sync.model import TaskManager
+from panel_sync.model import TaskManager
 
 
 STATE_VERSION = 1
@@ -23,7 +23,7 @@ def default_state_path() -> Path:
         Path.home()
         / ".local"
         / "state"
-        / "plasma-taskbar-sync"
+        / "panel-sync"
         / "state.json"
     )
 

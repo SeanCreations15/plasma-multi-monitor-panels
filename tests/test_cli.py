@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from plasma_taskbar_sync.cli import (
+from panel_sync.cli import (
     ServiceDetails,
     _test_launchers,
     build_parser,
@@ -18,15 +18,15 @@ from plasma_taskbar_sync.cli import (
     command_watch,
     main,
 )
-from plasma_taskbar_sync.events import EventSource
-from plasma_taskbar_sync.displays import (
+from panel_sync.events import EventSource
+from panel_sync.displays import (
     DisplayLayout,
     DisplayOutput,
     Geometry,
     MappedOutput,
 )
-from plasma_taskbar_sync.model import SyncResult, TaskManager
-from plasma_taskbar_sync.state import State
+from panel_sync.model import SyncResult, TaskManager
+from panel_sync.state import State
 
 
 class StatusClient:
@@ -148,7 +148,7 @@ class ParserTests(unittest.TestCase):
                 "applications:systemsettings.desktop",
                 "applications:org.kde.discover.desktop",
                 "applications:org.kde.kcalc.desktop",
-                "applications:plasma-taskbar-sync-self-test.desktop",
+                "applications:panel-sync-self-test.desktop",
             ]
         )
         self.assertNotEqual(",".join(_test_launchers(original)), original)
@@ -180,7 +180,7 @@ class WatchTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             with patch(
-                "plasma_taskbar_sync.cli.sync_once",
+                "panel_sync.cli.sync_once",
                 side_effect=run_sync,
             ):
                 with self.assertRaises(KeyboardInterrupt):
@@ -211,7 +211,7 @@ class WatchTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             with patch(
-                "plasma_taskbar_sync.cli.sync_once",
+                "panel_sync.cli.sync_once",
                 side_effect=run_sync,
             ):
                 with self.assertRaises(KeyboardInterrupt):
@@ -238,7 +238,7 @@ class WatchTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as directory:
             with patch(
-                "plasma_taskbar_sync.cli.sync_once",
+                "panel_sync.cli.sync_once",
                 side_effect=run_sync,
             ):
                 with self.assertRaises(KeyboardInterrupt):
@@ -267,7 +267,7 @@ class WatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with (
                 patch(
-                    "plasma_taskbar_sync.cli.sync_once",
+                    "panel_sync.cli.sync_once",
                     side_effect=run_sync,
                 ),
                 redirect_stderr(io.StringIO()),
@@ -299,7 +299,7 @@ class WatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with (
                 patch(
-                    "plasma_taskbar_sync.cli.sync_once",
+                    "panel_sync.cli.sync_once",
                     side_effect=run_sync,
                 ),
                 redirect_stderr(io.StringIO()),
@@ -338,7 +338,7 @@ class WatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with (
                 patch(
-                    "plasma_taskbar_sync.cli.sync_once",
+                    "panel_sync.cli.sync_once",
                     side_effect=run_sync,
                 ),
                 redirect_stdout(output),
@@ -381,7 +381,7 @@ class WatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with (
                 patch(
-                    "plasma_taskbar_sync.cli.sync_once",
+                    "panel_sync.cli.sync_once",
                     return_value=unchanged_result(),
                 ),
                 redirect_stdout(io.StringIO()),
@@ -418,7 +418,7 @@ class StatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             with patch(
-                "plasma_taskbar_sync.cli.service_details",
+                "panel_sync.cli.service_details",
                 return_value=ServiceDetails("active", "enabled"),
             ):
                 with redirect_stdout(output):
@@ -441,7 +441,7 @@ class StatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             with patch(
-                "plasma_taskbar_sync.cli.service_details",
+                "panel_sync.cli.service_details",
                 return_value=ServiceDetails("inactive", "enabled"),
             ):
                 with redirect_stdout(output):
@@ -458,7 +458,7 @@ class StatusTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = io.StringIO()
             with patch(
-                "plasma_taskbar_sync.cli.service_details",
+                "panel_sync.cli.service_details",
                 return_value=ServiceDetails("active", "enabled"),
             ):
                 with redirect_stdout(output):
@@ -506,19 +506,19 @@ class DoctorTests(unittest.TestCase):
             output = io.StringIO()
             with (
                 patch(
-                    "plasma_taskbar_sync.cli.service_details",
+                    "panel_sync.cli.service_details",
                     return_value=ServiceDetails("active", "enabled"),
                 ),
                 patch(
-                    "plasma_taskbar_sync.cli.find_qdbus",
+                    "panel_sync.cli.find_qdbus",
                     return_value=client.qdbus,
                 ),
                 patch(
-                    "plasma_taskbar_sync.cli.find_kbuildsycoca",
+                    "panel_sync.cli.find_kbuildsycoca",
                     return_value=client.kbuildsycoca,
                 ),
                 patch(
-                    "plasma_taskbar_sync.cli.PlasmaClient",
+                    "panel_sync.cli.PlasmaClient",
                     return_value=client,
                 ),
                 redirect_stdout(output),
@@ -529,7 +529,7 @@ class DoctorTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         text = output.getvalue()
-        self.assertIn("Plasma Taskbar Sync: 0.5.0", text)
+        self.assertIn("Panel Sync: 0.6.3", text)
         self.assertIn("Service state: active", text)
         self.assertIn("Task managers: 2", text)
         self.assertIn("Screen 0: panel 10, widget 20", text)
@@ -540,7 +540,7 @@ class DoctorTests(unittest.TestCase):
             output = io.StringIO()
             with (
                 patch(
-                    "plasma_taskbar_sync.cli.service_details",
+                    "panel_sync.cli.service_details",
                     return_value=ServiceDetails(
                         "unavailable",
                         "unavailable",
@@ -548,11 +548,11 @@ class DoctorTests(unittest.TestCase):
                     ),
                 ),
                 patch(
-                    "plasma_taskbar_sync.cli.find_qdbus",
+                    "panel_sync.cli.find_qdbus",
                     side_effect=FileNotFoundError("qdbus missing"),
                 ),
                 patch(
-                    "plasma_taskbar_sync.cli.find_kbuildsycoca",
+                    "panel_sync.cli.find_kbuildsycoca",
                     side_effect=FileNotFoundError(
                         "kbuildsycoca6 missing"
                     ),

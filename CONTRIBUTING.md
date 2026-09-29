@@ -17,7 +17,7 @@ or a persistent build directory.
 
 Include:
 
-- `plasma-taskbar-sync doctor`
+- `panel-sync doctor`
 - the Plasma version
 - the distro and release
 - the task manager type

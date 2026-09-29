@@ -5,7 +5,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from plasma_taskbar_sync.displays import (
+from panel_sync.displays import (
     DisplayOutput,
     Geometry,
     PlasmaScreen,
@@ -170,7 +170,7 @@ class ScreenMappingTests(unittest.TestCase):
             stderr="",
         )
         with patch(
-            "plasma_taskbar_sync.displays.subprocess.run",
+            "panel_sync.displays.subprocess.run",
             return_value=completed,
         ) as run:
             layout = discover_display_layout(

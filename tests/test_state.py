@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from plasma_taskbar_sync.state import (
+from panel_sync.state import (
     default_state_path,
     empty_state,
     read_state,
@@ -70,14 +70,14 @@ class StateTests(unittest.TestCase):
 
     def test_state_uses_the_home_directory(self) -> None:
         with patch(
-            "plasma_taskbar_sync.state.Path.home",
+            "panel_sync.state.Path.home",
             return_value=Path("/home/test"),
         ):
             self.assertEqual(
                 default_state_path(),
                 Path(
                     "/home/test/.local/state/"
-                    "plasma-taskbar-sync/state.json"
+                    "panel-sync/state.json"
                 ),
             )
 

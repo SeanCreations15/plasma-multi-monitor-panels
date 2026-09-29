@@ -5,7 +5,7 @@ After=graphical-session.target plasma-plasmashell.service
 
 [Service]
 Type=simple
-ExecStart=%h/.local/bin/plasma-taskbar-sync watch
+ExecStart=%h/.local/bin/panel-sync watch
 Restart=on-failure
 RestartSec=3
 

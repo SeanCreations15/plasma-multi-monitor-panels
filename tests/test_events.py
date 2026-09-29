@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from plasma_taskbar_sync.events import (
+from panel_sync.events import (
     PLASMA_CONFIG_NAME,
     _EVENT_HEADER,
     _IN_Q_OVERFLOW,
@@ -36,7 +36,7 @@ class ConfigPathTests(unittest.TestCase):
                 clear=False,
             ),
             patch(
-                "plasma_taskbar_sync.events.Path.home",
+                "panel_sync.events.Path.home",
                 return_value=Path("/home/test"),
             ),
         ):
@@ -49,7 +49,7 @@ class ConfigPathTests(unittest.TestCase):
         with (
             patch.dict(os.environ, {}, clear=True),
             patch(
-                "plasma_taskbar_sync.events.Path.home",
+                "panel_sync.events.Path.home",
                 return_value=Path("/home/test"),
             ),
         ):

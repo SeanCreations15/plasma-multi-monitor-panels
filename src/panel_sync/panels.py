@@ -9,7 +9,7 @@ import shutil
 import time
 from typing import Any, Protocol
 
-from plasma_taskbar_sync.displays import (
+from panel_sync.displays import (
     DisplayLayout,
     DisplayOutput,
     Geometry,
@@ -24,6 +24,7 @@ function readTree(applet, path) {
     var ignoredKeys = {
         activityId: true, formfactor: true, immutability: true,
         lastScreen: true, location: true, plugin: true,
+        popupHeight: true, popupWidth: true,
         SystrayContainmentId: true, wallpaperplugin: true
     };
     var keys = applet.configKeys.concat([]);
@@ -35,7 +36,8 @@ function readTree(applet, path) {
     }
     var groups = applet.configGroups.concat([]);
     for (var j = 0; j < groups.length; ++j) {
-        if (groups[j] === "Applets" || groups[j] === "Shortcuts") continue;
+        if (groups[j] === "Applets" || groups[j] === "ConfigDialog"
+                || groups[j] === "Shortcuts") continue;
         result.groups[groups[j]] = readTree(applet, path.concat([groups[j]]));
     }
     applet.currentConfigGroup = [];
@@ -72,10 +74,25 @@ for (var i = 0; i < panelIds.length; ++i) {
     var widgetResult = [];
     for (var j = 0; j < widgets.length; ++j) {
         var widget = widgets[j];
+        var config = readTree(widget, []);
+        // Digital Clock removes dateDisplayFormat from KConfig when the user
+        // selects its default, Adaptive. Preserve that semantic default in
+        // the snapshot so it can be copied over an explicitly stored value
+        // such as BesideTime on another panel.
+        if (widget.type === "org.kde.plasma.digitalclock") {
+            widget.currentConfigGroup = ["Appearance"];
+            if (!config.groups.Appearance) {
+                config.groups.Appearance = {keys: {}, groups: {}};
+            }
+            config.groups.Appearance.keys.dateDisplayFormat = String(
+                widget.readConfig("dateDisplayFormat", "Adaptive") || "Adaptive"
+            );
+            widget.currentConfigGroup = [];
+        }
         widgetResult.push({
             type: widget.type,
             index: j,
-            config: readTree(widget, []),
+            config: config,
             trayConfig: widget.type === "org.kde.plasma.systemtray"
                 ? trayTree(widget) : null
         });
@@ -200,32 +217,58 @@ def _panel_state_path(state_path: Path) -> Path:
     return state_path.with_name("panels.json")
 
 
-def _read_panel_state(state_path: Path) -> dict[str, Any] | None:
+def _valid_profile(value: Any) -> bool:
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("properties"), dict)
+        and isinstance(value.get("widgets"), list)
+    )
+
+
+def _read_panel_state(state_path: Path) -> dict[int, dict[str, Any]] | None:
     path = _panel_state_path(state_path)
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
         return None
-    if not isinstance(value, dict) or value.get("version") != 1:
+    if not isinstance(value, dict):
         raise ValueError(f"unsupported panel sync state in {path}")
-    selected = value.get("selected")
-    if not isinstance(selected, dict):
-        raise ValueError(f"invalid panel sync state in {path}")
-    if not isinstance(selected.get("properties"), dict):
-        raise ValueError(f"invalid panel properties in {path}")
-    if not isinstance(selected.get("widgets"), list):
-        raise ValueError(f"invalid panel widgets in {path}")
-    return selected
+    # Version 1 stored one universal profile. Plasma may serialize an
+    # equivalent default as an omitted key on one panel and an explicit key on
+    # another, so a universal baseline creates false conflicts. Treat it as
+    # uninitialized and migrate it on the next successful pass.
+    if value.get("version") == 1:
+        return None
+    if value.get("version") != 2 or not isinstance(value.get("screens"), dict):
+        raise ValueError(f"unsupported panel sync state in {path}")
+    profiles: dict[int, dict[str, Any]] = {}
+    for screen, profile in value["screens"].items():
+        try:
+            screen_number = int(screen)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"invalid panel screen in {path}") from error
+        if not _valid_profile(profile):
+            raise ValueError(f"invalid panel profile for screen {screen} in {path}")
+        profiles[screen_number] = profile
+    return profiles
 
 
-def _write_panel_state(state_path: Path, panel: dict[str, Any]) -> None:
+def _write_panel_state(
+    state_path: Path, panels: list[dict[str, Any]]
+) -> None:
     path = _panel_state_path(state_path)
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_name(f".{path.name}.{time.time_ns()}.tmp")
     try:
         temporary.write_text(
             json.dumps(
-                {"version": 1, "selected": _profile(panel)},
+                {
+                    "version": 2,
+                    "screens": {
+                        str(panel["screen"]): _profile(panel)
+                        for panel in panels
+                    },
+                },
                 indent=2,
                 sort_keys=True,
             )
@@ -438,7 +481,10 @@ def sync_panels(
         edited = [
             panel
             for panel in active
-            if not panels_equivalent(previous, _profile(panel))
+            if panel["screen"] in previous
+            and not panels_equivalent(
+                previous[panel["screen"]], _profile(panel)
+            )
         ]
         if not edited:
             source = _fallback_source(by_screen, layout)
@@ -509,8 +555,9 @@ def sync_panels(
             raise RuntimeError(
                 "panel synchronization did not verify; restored destination panels"
             )
+        active, _ = _active_panels(verified, layout)
     if not dry_run:
-        _write_panel_state(state_path, source)
+        _write_panel_state(state_path, active)
     return PanelSyncResult(
         panels=len(layout.screens),
         changed=bool(changed or missing_screens),

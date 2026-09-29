@@ -1,4 +1,4 @@
-"""Command-line interface for Plasma Taskbar Sync."""
+"""Command-line interface for Panel Sync."""
 
 from __future__ import annotations
 
@@ -12,22 +12,22 @@ import subprocess
 import sys
 import time
 
-from plasma_taskbar_sync import __version__
-from plasma_taskbar_sync.core import sync_once
-from plasma_taskbar_sync.events import (
+from panel_sync import __version__
+from panel_sync.core import sync_once
+from panel_sync.events import (
     EventSource,
     InotifyEventSource,
     plasma_config_path,
 )
-from plasma_taskbar_sync.displays import find_kscreen_doctor
-from plasma_taskbar_sync.model import TaskManager
-from plasma_taskbar_sync.panels import backup_plasma_config, sync_panels
-from plasma_taskbar_sync.plasma import (
+from panel_sync.displays import find_kscreen_doctor
+from panel_sync.model import TaskManager
+from panel_sync.panels import backup_plasma_config, sync_panels
+from panel_sync.plasma import (
     PlasmaClient,
     find_kbuildsycoca,
     find_qdbus,
 )
-from plasma_taskbar_sync.state import (
+from panel_sync.state import (
     default_state_path,
     exclusive_lock,
     read_state,
@@ -46,7 +46,7 @@ _EXPECTED_ERRORS = (
     subprocess.SubprocessError,
     ValueError,
 )
-_SERVICE_NAME = "plasma-taskbar-sync.service"
+_SERVICE_NAME = "panel-sync.service"
 _SYSTEMCTL_TIMEOUT = 5
 _DEBOUNCE_SECONDS = 0.5
 _ERROR_RETRY_SECONDS = 2.0
@@ -433,7 +433,7 @@ def command_doctor(state_path: Path, qdbus: str | None = None) -> int:
         / _SERVICE_NAME
     )
 
-    print(f"Plasma Taskbar Sync: {__version__}")
+    print(f"Panel Sync: {__version__}")
     print(f"Python: {sys.version.split()[0]}")
     print(f"Executable: {Path(sys.argv[0]).resolve()}")
     print(
@@ -544,7 +544,7 @@ def _test_launchers(original: str) -> list[str]:
         "applications:systemsettings.desktop",
         "applications:org.kde.discover.desktop",
         "applications:org.kde.kcalc.desktop",
-        "applications:plasma-taskbar-sync-self-test.desktop",
+        "applications:panel-sync-self-test.desktop",
     ]
     for marker in markers:
         if marker not in items:
@@ -660,7 +660,7 @@ def command_self_test(client: PlasmaClient, state_path: Path) -> int:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="plasma-taskbar-sync",
+        prog="panel-sync",
         description=(
             "Create and synchronize KDE Plasma panels across connected displays."
         ),
@@ -741,7 +741,7 @@ def main(argv: list[str] | None = None) -> int:
     except KeyboardInterrupt:
         return 130
     except _EXPECTED_ERRORS as error:
-        print(f"plasma-taskbar-sync: {concise_error(error)}", file=sys.stderr)
+        print(f"panel-sync: {concise_error(error)}", file=sys.stderr)
         return 1
     parser.error(f"unknown command: {args.command}")
     return 2

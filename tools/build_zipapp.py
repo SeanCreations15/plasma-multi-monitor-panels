@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the self-contained Plasma Taskbar Sync executable."""
+"""Build the self-contained Panel Sync executable."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ def build_zipapp(source: Path, target: Path) -> None:
         source,
         target=target,
         interpreter="/usr/bin/env python3",
-        main="plasma_taskbar_sync.cli:entrypoint",
+        main="panel_sync.cli:entrypoint",
         filter=_include,
         compressed=True,
     )

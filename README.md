@@ -40,17 +40,21 @@ cd plasma-multi-monitor-panels
 ```
 
 No root access or third-party Python packages are required. The installer
-creates and starts:
+installs the program as the `panel-sync` command and creates and starts:
 
 ```text
-~/.local/bin/plasma-taskbar-sync
-~/.local/share/systemd/user/plasma-taskbar-sync.service
+~/.local/bin/panel-sync
+~/.local/share/systemd/user/panel-sync.service
 ```
+
+When upgrading from the former `plasma-taskbar-sync` command, the installer
+removes the old executable and service and moves its saved state and backups to
+the new `panel-sync` state directory.
 
 Check the installation:
 
 ```sh
-plasma-taskbar-sync status
+panel-sync status
 ```
 
 ## Initial synchronization
@@ -88,7 +92,7 @@ Transient startup and hot-plug states are retried without modifying panels.
 Before writing, the service backs up Plasma's panel configuration to:
 
 ```text
-~/.local/state/plasma-taskbar-sync/backups/
+~/.local/state/panel-sync/backups/
 ```
 
 The ten newest backups are retained. Every panel update is read back and
@@ -106,11 +110,11 @@ The service makes no changes when:
 ## Commands
 
 ```text
-plasma-taskbar-sync status [--json]
-plasma-taskbar-sync doctor
-plasma-taskbar-sync once [--dry-run]
-plasma-taskbar-sync watch [--fallback-interval SECONDS]
-plasma-taskbar-sync self-test
+panel-sync status [--json]
+panel-sync doctor
+panel-sync once [--dry-run]
+panel-sync watch [--fallback-interval SECONDS]
+panel-sync self-test
 ```
 
 - `status` reports synchronization and service health.
@@ -137,9 +141,9 @@ and preserves saved synchronization state.
 ## Troubleshooting
 
 ```sh
-plasma-taskbar-sync doctor
-systemctl --user status plasma-taskbar-sync.service
-journalctl --user -u plasma-taskbar-sync.service -n 100
+panel-sync doctor
+systemctl --user status panel-sync.service
+journalctl --user -u panel-sync.service -n 100
 ```
 
 The watcher logs synchronization changes, conflicts, display-mapping problems,

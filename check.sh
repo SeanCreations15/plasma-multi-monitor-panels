@@ -11,15 +11,15 @@ done
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src \
     python3 -m unittest discover -s tests -v
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src \
-    python3 -m plasma_taskbar_sync --version
+    python3 -m panel_sync --version
 sh tests/test_install.sh
 
-archive=$(mktemp -t plasma-taskbar-sync.XXXXXX)
+archive=$(mktemp -t panel-sync.XXXXXX)
 service_check_dir=
 cleanup() {
     rm -f -- "${archive}"
     if [ -n "${service_check_dir}" ]; then
-        rm -f -- "${service_check_dir}/plasma-taskbar-sync.service"
+        rm -f -- "${service_check_dir}/panel-sync.service"
         rmdir -- "${service_check_dir}"
     fi
 }
@@ -29,24 +29,24 @@ chmod 755 "${archive}"
 "${archive}" --version
 
 if command -v systemd-analyze >/dev/null 2>&1; then
-    service_check_dir=$(mktemp -d -t plasma-taskbar-sync-systemd.XXXXXX)
-    service_check="${service_check_dir}/plasma-taskbar-sync.service"
+    service_check_dir=$(mktemp -d -t panel-sync-systemd.XXXXXX)
+    service_check="${service_check_dir}/panel-sync.service"
     exec_start_count=0
     while IFS= read -r unit_line; do
         if [ "${unit_line}" = \
-            "ExecStart=%h/.local/bin/plasma-taskbar-sync watch" ]; then
+            "ExecStart=%h/.local/bin/panel-sync watch" ]; then
             printf 'ExecStart=%s watch\n' "${archive}"
             exec_start_count=$((exec_start_count + 1))
         else
             printf '%s\n' "${unit_line}"
         fi
-    done < systemd/plasma-taskbar-sync.service > "${service_check}"
+    done < systemd/panel-sync.service > "${service_check}"
     if [ "${exec_start_count}" -ne 1 ]; then
-        echo "Unexpected ExecStart in systemd/plasma-taskbar-sync.service" >&2
+        echo "Unexpected ExecStart in systemd/panel-sync.service" >&2
         exit 1
     fi
 
-    verify_output=$(mktemp -t plasma-taskbar-sync-systemd.XXXXXX)
+    verify_output=$(mktemp -t panel-sync-systemd.XXXXXX)
     if ! systemd-analyze verify "${service_check}" 2>"${verify_output}"; then
         filtered_output="${verify_output}.filtered"
         grep -v \

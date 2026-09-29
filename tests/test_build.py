@@ -13,7 +13,7 @@ class ZipappTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "src"
-            package = source / "plasma_taskbar_sync"
+            package = source / "panel_sync"
             cache = package / "__pycache__"
             cache.mkdir(parents=True)
             (package / "cli.py").write_text(
@@ -21,13 +21,13 @@ class ZipappTests(unittest.TestCase):
                 encoding="utf-8",
             )
             (cache / "cli.cpython-310.pyc").write_bytes(b"cached")
-            target = root / "plasma-taskbar-sync"
+            target = root / "panel-sync"
 
             build_zipapp(source, target)
 
             with ZipFile(target) as archive:
                 names = archive.namelist()
-            self.assertIn("plasma_taskbar_sync/cli.py", names)
+            self.assertIn("panel_sync/cli.py", names)
             self.assertFalse(any("__pycache__" in name for name in names))
             self.assertFalse(any(name.endswith(".pyc") for name in names))
 

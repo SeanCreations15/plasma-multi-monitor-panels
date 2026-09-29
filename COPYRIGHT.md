@@ -43,8 +43,8 @@ and the related documentation and tests.
 The following source and test files were first added by SeanCreations15 and are
 not present in the inherited SleepyStew revision (`12bcb31`):
 
-- `src/plasma_taskbar_sync/displays.py`
-- `src/plasma_taskbar_sync/panels.py`
+- `src/panel_sync/displays.py`
+- `src/panel_sync/panels.py`
 - `tests/test_displays.py`
 - `tests/test_panels.py`
 
