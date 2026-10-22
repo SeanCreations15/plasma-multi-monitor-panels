@@ -56,6 +56,14 @@ var result = [];
 for (var i = 0; i < panelIds.length; ++i) {
     var panel = panelById(panelIds[i]);
     if (!panel) continue;
+    var screen = panel.screen;
+    // Plasma retains panels for disconnected outputs. Their screen may be -1
+    // or the old index beyond the current screenCount, and config reads can
+    // crash plasmashell while the output is absent.
+    if (screen < 0 || screen >= screenCount) {
+        result.push({id: panel.id, screen: screen, properties: {}, widgets: []});
+        continue;
+    }
     var widgets = panel.widgets().concat([]);
     var byId = {};
     for (var wi = 0; wi < widgets.length; ++wi) byId[widgets[wi].id] = widgets[wi];
@@ -99,7 +107,7 @@ for (var i = 0; i < panelIds.length; ++i) {
     }
     result.push({
         id: panel.id,
-        screen: panel.screen,
+        screen: screen,
         properties: {
             location: panel.location,
             height: panel.height,
@@ -502,6 +510,14 @@ def sync_panels(
     missing_screens = [
         screen for screen in layout.screens if screen not in by_screen
     ]
+    if missing_screens and any(
+        panel["screen"] < 0 or panel["screen"] not in layout.screens
+        for panel in panels
+    ):
+        raise RuntimeError(
+            "Plasma still has a detached panel while an output lacks one; "
+            "waiting for screen reassignment"
+        )
     created_ids: list[int] = []
     if missing_screens and not dry_run:
         original_ids = {panel["id"] for panel in panels}

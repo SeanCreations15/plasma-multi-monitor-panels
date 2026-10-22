@@ -84,6 +84,22 @@ class ScriptClient:
 
 
 class PanelTests(unittest.TestCase):
+    def test_detached_panel_is_skipped_before_config_reads(self) -> None:
+        guard = PANEL_QUERY_SCRIPT.index("if (screen < 0 || screen >= screenCount)")
+        self.assertLess(guard, PANEL_QUERY_SCRIPT.index("panel.widgets()"))
+        self.assertLess(guard, PANEL_QUERY_SCRIPT.index('panel.readConfig("AppletOrder"'))
+
+    def test_missing_screen_waits_for_detached_panel_reassignment(self) -> None:
+        client = ScriptClient([[panel(1, 0), panel(2, -1)]])
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(RuntimeError, "waiting for screen reassignment"):
+                sync_panels(
+                    client,
+                    Path(directory) / "state.json",
+                    layout(0, 0, 1),
+                )
+        self.assertEqual(len(client.scripts), 1)
+
     def test_query_ignores_transient_widget_window_geometry(self) -> None:
         self.assertIn("popupHeight: true, popupWidth: true", PANEL_QUERY_SCRIPT)
         self.assertIn('groups[j] === "ConfigDialog"', PANEL_QUERY_SCRIPT)

@@ -32,7 +32,7 @@ var supported = {
 var result = [];
 for (var panelIndex = 0; panelIndex < panelIds.length; ++panelIndex) {
     var panel = panelById(panelIds[panelIndex]);
-    if (!panel) continue;
+    if (!panel || panel.screen < 0 || panel.screen >= screenCount) continue;
     var widgets = panel.widgets();
     for (var widgetIndex = 0; widgetIndex < widgets.length; ++widgetIndex) {
         var widget = widgets[widgetIndex];
@@ -187,7 +187,7 @@ var target = {target};
 var supported = {plugins};
 for (var panelIndex = 0; panelIndex < panelIds.length; ++panelIndex) {{
     var panel = panelById(panelIds[panelIndex]);
-    if (!panel) continue;
+    if (!panel || panel.screen < 0 || panel.screen >= screenCount) continue;
     var widgets = panel.widgets();
     for (var widgetIndex = 0; widgetIndex < widgets.length; ++widgetIndex) {{
         var widget = widgets[widgetIndex];
@@ -215,7 +215,7 @@ var generalTarget = {general_target};
 var supported = {plugins};
 for (var panelIndex = 0; panelIndex < panelIds.length; ++panelIndex) {{
     var panel = panelById(panelIds[panelIndex]);
-    if (!panel) continue;
+    if (!panel || panel.screen < 0 || panel.screen >= screenCount) continue;
     var widgets = panel.widgets();
     for (var widgetIndex = 0; widgetIndex < widgets.length; ++widgetIndex) {{
         var widget = widgets[widgetIndex];

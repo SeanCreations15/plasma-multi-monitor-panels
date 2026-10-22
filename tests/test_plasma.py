@@ -35,6 +35,7 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIn("org.kde.plasma.icontasks", QUERY_SCRIPT)
         self.assertIn("org.kde.plasma.taskmanager", QUERY_SCRIPT)
         self.assertNotIn("dmsManaged", QUERY_SCRIPT)
+        self.assertIn("panel.screen >= screenCount", QUERY_SCRIPT)
 
     def test_records_are_sorted_by_screen_panel_and_widget(self) -> None:
         records = [
